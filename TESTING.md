@@ -1,6 +1,6 @@
 # Tekshiruv holati — 2026-11-02
 
-Yangi versiya: 36 passed, skip yo'q. Ruff: All checks passed.
+Yangi versiya: 38 passed, skip yo'q. Ruff: All checks passed.
 Sinov: python -m pytest -q --junitxml=test-results/pytest.xml.
 
 Tekshirilgan: doimiy ReplyKeyboard, xizmat tanlash, faqat pasaytirish tanlovlari,
@@ -32,3 +32,5 @@ aslidan katta fayl foydalanuvchiga yuborilmaydi. 4K ga kattalashtirish olib tash
 Ruff va pytest mahalliy tasdiqlangan. Docker/native API/Render va haqiqiy 100 MB
 Telegram almashinuvi deploydan keyin tekshiriladi; ular hali mahalliy sinov deb
 ko'rsatilmaydi. Natijalar tasdiqlanganda hisobot yangilanadi.
+
+Qo‘shimcha tekshiruv: 1900 MB chegarasiga ruxsat faqat local mode bilan; yuqori limit rad etiladi. Faol videoni bekor qilish worker jarayonini o‘ldirmasligi tekshirildi.

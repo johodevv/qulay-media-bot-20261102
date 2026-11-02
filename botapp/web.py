@@ -7,7 +7,7 @@ from aiohttp import web
 from telegram import Update
 from telegram.ext import Application
 
-from botapp.config import Settings
+from botapp.config import MB, Settings
 
 
 def create_web_app(application: Application, settings: Settings, state: dict) -> web.Application:
@@ -18,7 +18,13 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
         )
         ready = state.get("ready", False) and workers_ok
         return web.json_response(
-            {"status": "ok" if ready else "starting"}, status=200 if ready else 503
+            {
+                "status": "ok" if ready else "starting",
+                "max_input_mb": settings.max_input_bytes // MB,
+                "local_api": settings.local_mode,
+                "version": "0.2.0",
+            },
+            status=200 if ready else 503,
         )
 
     async def webhook(request: web.Request) -> web.Response:

@@ -250,3 +250,40 @@ async def test_document_is_not_blocked_by_video(settings, tmp_path, monkeypatch)
         release_video.set()
         await asyncio.wait_for(service.video_queue.join(), 10)
         await service.stop()
+
+
+async def test_cancelling_video_keeps_worker_alive(settings, tmp_path, monkeypatch):
+    started, stopped = asyncio.Event(), asyncio.Event()
+    source = tmp_path / "source"
+    source.write_bytes(b"source")
+
+    async def convert(*args, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    async def download(path, **kwargs):
+        shutil.copyfile(source, path)
+
+    monkeypatch.setattr("botapp.service.convert_video", convert)
+    bot = SimpleNamespace(
+        get_file=AsyncMock(return_value=SimpleNamespace(file_size=6, download_to_drive=download)),
+        edit_message_text=AsyncMock(),
+        send_document=AsyncMock(),
+    )
+    service = ConversionService(settings)
+    session = service.add_upload(1, Upload("a", 6, "video", 1280, 720))
+    service.enqueue(1, 1, session.nonce, "video-144", 1)
+    await service.start(bot)
+    try:
+        await asyncio.wait_for(started.wait(), 10)
+        service.cancel(1)
+        await asyncio.wait_for(stopped.wait(), 2)
+        await asyncio.wait_for(service.video_queue.join(), 2)
+        assert service.video_worker and not service.video_worker.done()
+        assert 1 not in service.busy
+        bot.send_document.assert_not_called()
+    finally:
+        await service.stop()

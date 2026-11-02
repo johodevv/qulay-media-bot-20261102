@@ -24,8 +24,8 @@ services:
       - key: TELEGRAM_API_HASH
         sync: false
       - key: MAX_INPUT_MB
-        value: "100"
+        value: "1900"
       - key: MAX_OUTPUT_MB
-        value: "100"
+        value: "1900"
       - key: FFMPEG_THREADS
         value: "2"

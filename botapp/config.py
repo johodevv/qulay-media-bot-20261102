@@ -125,10 +125,14 @@ class Settings:
             raise ValueError("20/49 MB dan katta limit uchun TELEGRAM_API_URL kerak.")
         if self.local_mode and not self.api_url:
             raise ValueError("TELEGRAM_LOCAL_MODE uchun TELEGRAM_API_URL kerak.")
-        if self.max_output_bytes > 49 * MB and not self.local_mode:
+        if (
+            self.max_input_bytes > 20 * MB or self.max_output_bytes > 49 * MB
+        ) and not self.local_mode:
             raise ValueError(
                 "Katta fayllarni xotiraga yuklamaslik uchun TELEGRAM_LOCAL_MODE kerak."
             )
+        if self.max_input_bytes > 1900 * MB:
+            raise ValueError("Kirish limiti 1900 MB dan oshmasin.")
         if self.max_output_bytes > 1900 * MB:
             raise ValueError("Chiqish limiti 1900 MB dan oshmasin.")
         if self.embedded_api:

@@ -50,8 +50,8 @@ Hostingning maxfiy environment variables sozlamalari:
     TELEGRAM_LOCAL_MODE=true
     TELEGRAM_API_URL=http://127.0.0.1:8081
     TELEGRAM_API_DIR=/tmp/telegram-bot-api
-    MAX_INPUT_MB=100
-    MAX_OUTPUT_MB=100
+    MAX_INPUT_MB=1900
+    MAX_OUTPUT_MB=1900
 
 API va bot bir fayl tizimida bo'ladi. Kirish hardlink bilan ishlanadi; katta fayl
 Python xotirasiga to'liq yuklanmaydi va qayta nusxalanmaydi. Natija file:// orqali

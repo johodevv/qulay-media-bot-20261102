@@ -74,6 +74,7 @@ class ConversionService:
         self.video_worker: asyncio.Task | None = None
         self.progress: dict[int, Progress] = {}
         self.api_files: dict[int, list[Path]] = {}
+        self.running: dict[int, asyncio.Task] = {}
 
     def select_service(self, user_id: int, mode: str) -> None:
         if user_id in self.busy:
@@ -169,7 +170,9 @@ class ConversionService:
         self.sessions.pop(user_id, None)
         if user_id in self.busy:
             self.cancelled.add(user_id)
-            return "Bekor qilish belgilandi. Jarayon tugatilgach natija yuborilmaydi."
+            if task := self.running.get(user_id):
+                task.cancel()
+            return "❌ Bekor qilinyapti. Bu topshiriq natijasi yuborilmaydi."
         return "Tanlov va rasmlar tozalandi. Yangi rasm yoki video yuboring."
 
     async def start(self, bot: Bot) -> None:
@@ -193,9 +196,13 @@ class ConversionService:
             started = time.monotonic()
             try:
                 if job.user_id not in self.cancelled:
-                    await self.execute(bot, job)
+                    task = asyncio.create_task(self.execute(bot, job))
+                    self.running[job.user_id] = task
+                    await task
             except asyncio.CancelledError:
-                raise
+                if asyncio.current_task().cancelling():
+                    raise
+                await self.notify(bot, job, "❌ Topshiriq bekor qilindi.")
             except MediaError as exc:
                 await self.notify(bot, job, str(exc))
             except TelegramError:
@@ -210,6 +217,7 @@ class ConversionService:
                     "Topshiriq yakuni: %s; vaqt=%.1fs", job.action, time.monotonic() - started
                 )
                 self.progress.pop(job.user_id, None)
+                self.running.pop(job.user_id, None)
                 self.busy.discard(job.user_id)
                 self.cancelled.discard(job.user_id)
                 queue.task_done()
@@ -252,7 +260,7 @@ class ConversionService:
             for index, upload in enumerate(job.uploads):
                 if job.user_id in self.cancelled:
                     return
-                remote = await bot.get_file(upload.file_id)
+                remote = await bot.get_file(upload.file_id, read_timeout=self.settings.job_timeout)
                 if remote.file_size and remote.file_size > self.settings.max_input_bytes:
                     raise MediaError("Fayl belgilangan limitdan katta.")
                 path = root / f"input-{index}.{'mp4' if upload.kind == 'video' else 'image'}"
@@ -337,8 +345,8 @@ class ConversionService:
                     document=output.resolve().as_uri(),
                     filename=f"natija.{extension}",
                     caption=caption,
-                    read_timeout=600,
-                    write_timeout=600,
+                    read_timeout=max(600, self.settings.job_timeout),
+                    write_timeout=max(600, self.settings.job_timeout),
                 )
             else:
                 with output.open("rb") as stream:
