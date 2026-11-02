@@ -76,6 +76,12 @@ tozalamasdan menyuni qaytaradi. Tegishli 16 test, keyingi 6 UI testi o'tdi.
 Kod d7b2ccb GitHub'ga yuborilgan. Render Chrome'da login talab qildi;
 ushbu menyu versiyasi hali serverga chiqarilmadi. Joriy runtime 0.4.1 qolmoqda.
 
+Keyingi tasdiq: foydalanuvchi Render'ga kirgach, e9b3854 versiyasi mavjud Free
+xizmatga Dashboard orqali joylandi. Deploy dep-dbkbvkon74is73c1bnf0 Live;
+Office smoke o'tdi, webhook OCR=True ishga tushdi; /health HTTP 200 version=0.4.2.
+Yashirib-ochish sozlamasi va /menu buyrug'i shu versiyada mavjud. UptimeRobot
+804520050 monitori saqlangan. Belgining ko'rinishi foydalanuvchi Telegram klientiga bog'liq.
+
 ## Joylashuvni saqlaydigan OCR eksporti
 
 0.3.0: PDF ichida ko'rinadigan matn obyektlari, Word ichida tahrirlanadigan matn
