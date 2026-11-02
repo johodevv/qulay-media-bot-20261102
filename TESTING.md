@@ -51,6 +51,17 @@ Telegram ID bekor bo'lsa qayta konvertatsiya, tarmoq timeoutida CPU sarflamaslik
 tekshirildi. Diagnostics autentifikatsiyasiz 403 qaytaradi; foydalanuvchi/fayl ID
 chiqarmaydi. Maxfiy kalit va shaxsiy hujjatlar Git'ga kiritilmadi.
 
+0.4.1 live: health HTTP 200 / version=0.4.1. Serverdagi bir xil 8 qatorli sun'iy
+rasmda 4 oqim → 1 oqim: 28.912 s → 4.517 s va ikkinchi takrorda 35.000 s →
+4.991 s. Har ikki holatda tanilgan matn aynan bir xil. Mediana 31.956 s → 4.754 s,
+ya'ni ushbu OCR namunasi 6.72x tezroq. Bu video yoki Telegram almashinuvini
+6.72x tezlatish da'vosi emas. Oldingi barcha 57 test va so'nggi cache-timeout
+tuzatishiga tegishli 20 test o'tdi. Server rejasi Free, CPU chegarasi o'zgarmadi.
+
+Monitoring: Chrome'da Domain Monitor tablari kuzatildi; UptimeRobot monitori
+tasdiqlanmadi. Domain Monitor shartlari 14 kundan keyin monitorni to'xtatishini
+aytadi. UptimeRobot hisobiga kirish foydalanuvchini kutmoqda.
+
 ## Joylashuvni saqlaydigan OCR eksporti
 
 0.3.0: PDF ichida ko'rinadigan matn obyektlari, Word ichida tahrirlanadigan matn
