@@ -22,6 +22,7 @@ from botapp.media import (
     images_to_text_word,
     images_to_word,
 )
+from botapp.office import convert_office
 from botapp.ui import progress_text
 
 logger = logging.getLogger(__name__)
@@ -112,7 +113,7 @@ class ConversionService:
         session = self.sessions.get(user_id)
         if (
             not session
-            or upload.kind == "video"
+            or upload.kind in {"video", "docx", "pdf"}
             or (session.uploads and session.uploads[0].kind != upload.kind)
         ):
             if not session and len(self.sessions) >= self.settings.max_sessions:
@@ -153,9 +154,19 @@ class ConversionService:
             if resolution and upload.width and upload.height:
                 if resolution >= min(upload.width, upload.height):
                     raise MediaError("Pastroq o'lchamni yoki «Hajmni kamaytirish»ni tanlang.")
+        elif session.uploads[0].kind in {"docx", "pdf"}:
+            expected = "docx-pdf" if session.uploads[0].kind == "docx" else "pdf-docx"
+            if action != expected:
+                raise MediaError("Fayl formati bilan xizmat mos emas.")
         elif action not in {"pdf", "word", "text", "pdf-edit", "word-layout"}:
             raise MediaError("Rasm uchun PDF yoki Word tanlang.")
-        job = Job(user_id, chat_id, tuple(session.uploads), action, status_id)
+        job = Job(
+            user_id,
+            chat_id,
+            tuple(session.uploads),
+            action,
+            status_id,
+        )
         queue = self.video_queue if action.startswith("video-") else self.queue
         if self.queue.qsize() + self.video_queue.qsize() >= self.settings.max_queue:
             raise MediaError("Navbat to'ldi. Birozdan so'ng shu tugmani qayta bosing.")
@@ -265,7 +276,8 @@ class ConversionService:
                 remote = await bot.get_file(upload.file_id, read_timeout=self.settings.job_timeout)
                 if remote.file_size and remote.file_size > self.settings.max_input_bytes:
                     raise MediaError("Fayl belgilangan limitdan katta.")
-                path = root / f"input-{index}.{'mp4' if upload.kind == 'video' else 'image'}"
+                suffix = {"video": "mp4", "image": "image", "pdf": "pdf", "docx": "docx"}
+                path = root / f"input-{index}.{suffix[upload.kind]}"
                 if self.settings.local_mode:
                     local = await asyncio.to_thread(Path(remote.file_path).resolve)
                     if (
@@ -292,11 +304,24 @@ class ConversionService:
             extension = (
                 "mp4"
                 if job.action.startswith("video-")
-                else ("pdf" if job.action in {"pdf", "pdf-edit"} else "docx")
+                else ("pdf" if job.action in {"pdf", "pdf-edit", "docx-pdf"} else "docx")
             )
             output = root / f"natija.{extension}"
             conversion_started = time.monotonic()
-            if job.action.startswith("video-"):
+            if job.action in {"docx-pdf", "pdf-docx"}:
+                progress.stage = (
+                    "Word PDF'ga aylantirilmoqda…"
+                    if job.action == "docx-pdf"
+                    else ("PDF Word'ga aylantirilmoqda…")
+                )
+                scanned = await convert_office(paths[0], output, job.uploads[0].kind, self.settings)
+                caption = "✅ PDF tayyor." if job.action == "docx-pdf" else "✅ Word tayyor."
+                caption += (
+                    "\nSahifalar va shriftlarni tekshiring: ayrim joylar farq qilishi mumkin."
+                )
+                if scanned:
+                    caption += "\nSkanerlangan sahifalar rasm holida qolishi mumkin."
+            elif job.action.startswith("video-"):
                 progress.stage = "Video kichraytirilmoqda…"
                 progress.percent = 0
 

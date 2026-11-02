@@ -14,6 +14,7 @@ from telegram.ext import (
 
 from botapp.config import MB, Settings
 from botapp.media import RESOLUTIONS, MediaError
+from botapp.office import OFFICE_MAX_BYTES
 from botapp.service import ConversionService, Upload
 from botapp.ui import CANCEL, SERVICES, STATUS, main_keyboard
 
@@ -115,6 +116,7 @@ class Handlers:
             "🎬 Video sifatini pasaytirish va hajmini kamaytirish\n"
             "📄 Rasm → PDF\n"
             "📝 Rasm → Word\n\n"
+            "📑 Word → PDF yoki PDF → Word\n\n"
             "Xizmatni tanlang → fayl yuboring → kerakli natijani belgilang.\n"
             "Bir hujjat uchun bir nechta rasm yuborishingiz mumkin.\n\n"
             f"Limit: jami {self.settings.max_input_bytes // MB} MB, "
@@ -173,6 +175,10 @@ class Handlers:
                 "Hammasini yuborgach «PDF tayyorlash»ni bosing.",
                 "word": "📝 Word uchun rasmlarni yuboring.\n"
                 "Hammasini yuborgach «Word tayyorlash»ni bosing.",
+                "docx-pdf": "📑 Word faylini (.docx) yuboring.\n"
+                "PDF avtomatik tayyorlanadi. Limit: 30 MB.",
+                "pdf-docx": "📃 PDF faylini yuboring. Word avtomatik tayyorlanadi.\n"
+                "Limit: 30 MB, 50 sahifa. Skanerlangan sahifalar rasm bo'lib qolishi mumkin.",
             }
             await message.reply_text(instructions[mode], reply_markup=main_keyboard())
             return
@@ -187,8 +193,15 @@ class Handlers:
                 kind = "image"
             elif mime.startswith("video/"):
                 kind = "video"
+            elif mime == "application/pdf" or (media.file_name or "").lower().endswith(".pdf"):
+                kind = "pdf"
+            elif (
+                mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                or (media.file_name or "").lower().endswith(".docx")
+            ):
+                kind = "docx"
             else:
-                await message.reply_text("JPG, PNG, WEBP, BMP, TIFF rasm yoki video fayl yuboring.")
+                await message.reply_text("Rasm, video, Word (.docx) yoki PDF faylini yuboring.")
                 return
         else:
             await message.reply_text(
@@ -197,6 +210,27 @@ class Handlers:
             return
         selected = self.service.sessions.get(update.effective_user.id)
         mode = selected.mode if selected else ""
+        if mode in {"docx-pdf", "pdf-docx"}:
+            expected = "docx" if mode == "docx-pdf" else "pdf"
+            if kind != expected:
+                await message.reply_text(
+                    "Word (.docx) faylini yuboring."
+                    if expected == "docx"
+                    else "PDF faylini yuboring."
+                )
+                return
+        if kind in {"docx", "pdf"}:
+            if mode and mode not in {"docx-pdf", "pdf-docx"}:
+                await message.reply_text(
+                    "Pastdan «Word → PDF» yoki «PDF → Word» xizmatini tanlang."
+                )
+                return
+            if not self.settings.soffice:
+                await message.reply_text("Word ↔ PDF xizmati serverda hali tayyor emas.")
+                return
+            if not media.file_size or media.file_size > OFFICE_MAX_BYTES:
+                await message.reply_text("Word/PDF fayli 30 MB dan oshmasin. Video limiti alohida.")
+                return
         if mode in {"pdf", "word"} and kind != "image":
             await message.reply_text(
                 "Bu xizmat uchun rasm yuboring. Video uchun pastdagi "
@@ -229,6 +263,20 @@ class Handlers:
             )
         except MediaError as exc:
             await message.reply_text(str(exc))
+            return
+        if kind in {"docx", "pdf"}:
+            action = "docx-pdf" if kind == "docx" else "pdf-docx"
+            status = await message.reply_text("⏳ Fayl qabul qilindi. Hujjat tayyorlanyapti…")
+            try:
+                self.service.enqueue(
+                    update.effective_user.id,
+                    update.effective_chat.id,
+                    session.nonce,
+                    action,
+                    status.message_id,
+                )
+            except MediaError as exc:
+                await status.edit_text(str(exc))
             return
         if kind == "image":
             text = image_prompt(len(session.uploads), session.mode, self.ocr_enabled)

@@ -4,8 +4,9 @@ O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va W
 
 ## Foydalanish
 
-/start dan keyin pastda doimiy tugmalar chiqadi: Video sifatini pasaytirish,
-Rasm → PDF, Rasm → Word, Jarayon holati va Bekor qilish.
+/start dan keyin pastda doimiy tugmalar chiqadi: Video hajmini kamaytirish,
+Rasm → PDF, Rasm → Word, Word → PDF, PDF → Word,
+Jarayon holati va Bekor qilish.
 Xizmatni tanlang, fayl yuboring va natijani belgilang. Bir nechta rasmni tartib bilan
 yuborib, barcha rasmlar qabul qilingach «PDF tayyorlash» yoki «Word tayyorlash»ni
 bosing. Asosiy tugma joylashuvni saqlaydigan, tanilgan matni tahrirlanadigan
@@ -18,6 +19,14 @@ logo va rangli bezaklar tasvir bo'lib qoladi. Aniqlanmagan yoki ishonchi past qi
 ham asl tasvir holida qolishi mumkin. Ko'rinish va shrift aynan nusxa bo'lishi
 kafolatlanmaydi. Word matni alohida tahrirlanadigan bloklar ko'rinishida;
 PDF matnini o'zgartirish uchun PDF tahrirlash dasturi kerak.
+
+Word → PDF va PDF → Word: xizmatni tanlab .docx yoki .pdf faylini yuboring,
+aylantirish avtomatik boshlanadi. Word → PDF uchun LibreOffice, PDF → Word uchun
+PyMuPDF va koordinatalarga joylangan Word matni ishlatiladi; murakkab shrift va
+joylashuv farq qilishi mumkin. Skanerlangan PDF sahifalari rasm bo'lib qolishi
+mumkin; bu yo'l OCR bajarmaydi. Hujjatlar limiti: 30 MB, PDF ko'pi bilan 50 sahifa.
+Video uchun katta fayl limiti alohida saqlanadi. Windows'da SOFFICE_PATH bilan
+LibreOffice yo'lini ko'rsatish mumkin; Docker'da GUI'siz LibreOffice bor.
 
 Video uchun faqat pastroq o'lchamlar yoki faqat hajmni kamaytirish tanlanadi.
 Manba o'lchami ma'lum bo'lsa yuqori tanlovlar ko'rsatilmaydi; fayl tekshirilganda

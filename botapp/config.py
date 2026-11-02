@@ -36,6 +36,10 @@ def executable(env: str, name: str) -> str | None:
                 candidate = Path(root) / folder / "tesseract.exe"
                 if candidate.is_file():
                     return str(candidate)
+    if name == "soffice":
+        candidate = ROOT / "tools" / "libreoffice" / "program" / "soffice.com"
+        if candidate.is_file():
+            return str(candidate)
     return None
 
 
@@ -66,6 +70,7 @@ class Settings:
     ffmpeg: str | None = None
     ffprobe: str | None = None
     tesseract: str | None = None
+    soffice: str | None = None
     ocr_languages: str = "uzb+uzb_cyrl+rus+eng"
 
     @classmethod
@@ -105,6 +110,7 @@ class Settings:
             ffmpeg=executable("FFMPEG_PATH", "ffmpeg"),
             ffprobe=executable("FFPROBE_PATH", "ffprobe"),
             tesseract=executable("TESSERACT_PATH", "tesseract"),
+            soffice=executable("SOFFICE_PATH", "soffice"),
             ocr_languages=os.getenv("OCR_LANGUAGES", "uzb+uzb_cyrl+rus+eng"),
         )
         settings.validate(require_token)

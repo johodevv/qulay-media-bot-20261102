@@ -1,7 +1,29 @@
 # Tekshiruv holati — 2026-11-02
 
-Yangi versiya: 42 passed, skip yo'q. Ruff: All checks passed.
+Yangi versiya: 49 passed, skip yo'q. Ruff: All checks passed.
 Sinov: python -m pytest -q --junitxml=test-results/pytest.xml.
+
+## 0.4.0 Word va PDF xizmatlari
+
+Menyu asosiy tanlovni bitta tayyorlash tugmasiga qisqartiradi. «Boshqa usullar»
+va «Orqaga» rasmlarni yo'qotmasdan ishlaydi. Eski video xizmat tugmasi ham taniladi.
+Word (.docx) yoki PDF yuborilganda tanlangan aylantirish avtomatik navbatga o'tadi.
+
+Word → PDF LibreOffice orqali; PDF → Word PyMuPDF matn koordinatalari va Word
+matn bloklari orqali ishlaydi. Rasm va chiziqlar fon qatlamida saqlanadi.
+Skanerlangan PDF matni bu yo'lda OCR qilinmaydi. Hujjat limiti 30 MB / 50 PDF sahifa;
+katta video limiti 1900 MB qoladi. Har konvertatsiyada LibreOffice dasturining
+birinchi ishga tushish sozlamalarini takrorlamaslik uchun faqat profil qayta ishlatiladi;
+kirish va chiqish fayllari topshiriq vaqtinchalik katalogida saqlanadi.
+
+Yangi sinovlar: haqiqiy DOCX → PDF → DOCX, ikki sahifa va raqamlar, rangli katakdagi
+yozuvlar, buzilgan Word, tashqi obyekt, parolli PDF, sahifa limiti, to'g'ri/noto'g'ri
+yo'nalish, qo'shimcha tugmasiz avtomatik navbat. Docker build ichida kichik
+Word → PDF → Word smoke sinovi ham bor. PDF → Word namunasi va hujjat maketlari
+render_docx.py orqali render qilinib ko'rildi. Dependency audit: ma'lum zaiflik topilmadi.
+Bu serverdagi haqiqiy Telegram fayli uchun tezlik kafolati emas.
+
+Chek va to'lov topshirig'i foydalanuvchi so'roviga ko'ra ushbu versiyaga qo'shilmadi.
 
 ## Joylashuvni saqlaydigan OCR eksporti
 

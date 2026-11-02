@@ -22,7 +22,8 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
                 "status": "ok" if ready else "starting",
                 "max_input_mb": settings.max_input_bytes // MB,
                 "local_api": settings.local_mode,
-                "version": "0.3.1",
+                "office_enabled": bool(settings.soffice),
+                "version": "0.4.0",
             },
             status=200 if ready else 503,
         )

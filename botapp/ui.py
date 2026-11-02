@@ -1,16 +1,25 @@
 from telegram import ReplyKeyboardMarkup
 
-VIDEO = "🎬 Video sifatini pasaytirish"
+VIDEO = "🎬 Video hajmini kamaytirish"
 PDF = "📄 Rasm → PDF"
 WORD = "📝 Rasm → Word"
+WORD_PDF = "📑 Word → PDF"
+PDF_WORD = "📃 PDF → Word"
 STATUS = "⏳ Jarayon holati"
 CANCEL = "❌ Bekor qilish"
-SERVICES = {VIDEO: "video", PDF: "pdf", WORD: "word"}
+SERVICES = {
+    "🎬 Video sifatini pasaytirish": "video",
+    VIDEO: "video",
+    PDF: "pdf",
+    WORD: "word",
+    WORD_PDF: "docx-pdf",
+    PDF_WORD: "pdf-docx",
+}
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [[VIDEO], [PDF, WORD], [STATUS, CANCEL]],
+        [[VIDEO], [PDF, WORD], [WORD_PDF, PDF_WORD], [STATUS, CANCEL]],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Xizmatni tanlang yoki fayl yuboring",

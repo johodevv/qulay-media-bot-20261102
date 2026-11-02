@@ -331,10 +331,14 @@ def add_textbox(paragraph, box: TextBox, scale: float, index: int):
 
 
 def images_to_layout_word(paths: list[Path], output: Path, settings: Settings) -> None:
+    layouts = (image_layout(path, settings) for path in paths)
+    layouts_to_word(layouts, output)
+
+
+def layouts_to_word(layouts, output: Path) -> None:
     document = Document()
     index = 0
-    for page_number, path in enumerate(paths):
-        layout = image_layout(path, settings)
+    for page_number, layout in enumerate(layouts):
         try:
             section = (
                 document.add_section(WD_SECTION_START.NEW_PAGE)
