@@ -36,6 +36,16 @@ Konvertatsiya foizi FFmpeg qayta ishlagan vaqtga asoslanadi. Telegram'dan olish 
 yuborishda foiz o'rniga ⏳ va bosqich nomi ko'rsatiladi. Holat har 4 soniyada yangilanadi.
 Video va hujjat uchun alohida navbat bor: uzun video boshqa xodimning PDF'ini kutdirmaydi.
 
+Takroran bir xil foydalanuvchi aynan bir xil fayllar va formatni yuborsa, 30 daqiqa
+ichida tayyor Telegram natijasi qayta ishlatilishi mumkin. Bu xotiradagi 128 ta
+fayl havolasi bilan cheklangan; mahalliy media nusxalari saqlab qolinmaydi.
+Restartda havolalar yo'qoladi. Yangi fayl birinchi safar odatdagidek qayta ishlanadi.
+OCR uchun Docker OMP_THREAD_LIMIT=1 ishlatadi; serverning CPU chegarasi o'zgarmaydi.
+Maxfiy /diagnostics bosqichlarning vaqtini shaxsiy ma'lumotsiz ko'rsatadi.
+POST /diagnostics/ocr-benchmark faqat sobit sun'iy rasmda 4/1 OCR oqimini solishtiradi;
+botda topshiriq bo'lsa ishlamaydi yoki kelgan topshiriqqa yo'l bo'shatadi.
+Ikkalasi X-Diagnostics-Token sarlavhasida WEBHOOK_SECRET talab qiladi.
+
 ## Windows'da ishga tushirish
 
 Python 3.12+, FFmpeg va FFprobe kerak. .env.example dan .env yarating va BOT_TOKEN yozing.

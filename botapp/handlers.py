@@ -146,6 +146,8 @@ class Handlers:
                 "Fayllar bajarish vaqtida bot serverida vaqtincha saqlanadi va ish tugagach "
                 "o'chiriladi. Elektr uzilishi yoki majburiy to'xtashda vaqtinchalik nusxa qolishi "
                 "mumkin. Telegram chatidagi nusxalar alohida saqlanadi.\n\n"
+                "Takroriy topshiriqni tezlatish uchun tayyor Telegram natijasiga havola "
+                f"{self.settings.session_ttl // 60} daqiqagacha xotirada saqlanishi mumkin.\n\n"
                 "Navbat va tanlovlar xotirada: bot qayta ishga tushsa qayta yuborish kerak. "
                 "Xizmat hujjatini yuborishdan oldin tashkilotingiz tartibini tekshiring."
             )

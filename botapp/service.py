@@ -6,11 +6,12 @@ import os
 import secrets
 import tempfile
 import time
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from telegram import Bot
-from telegram.error import TelegramError
+from telegram.error import BadRequest, TelegramError
 
 from botapp.config import MB, Settings
 from botapp.document_layout import images_to_editable_pdf, images_to_layout_word
@@ -62,6 +63,15 @@ class Job:
     uploads: tuple[Upload, ...]
     action: str
     status_id: int
+    queued_at: float = field(default_factory=time.monotonic)
+
+
+@dataclass(frozen=True)
+class CachedResult:
+    file_id: str
+    caption: str
+    filename: str
+    expires: float
 
 
 class ConversionService:
@@ -77,6 +87,47 @@ class ConversionService:
         self.progress: dict[int, Progress] = {}
         self.api_files: dict[int, list[Path]] = {}
         self.running: dict[int, asyncio.Task] = {}
+        self.results: OrderedDict[tuple, CachedResult] = OrderedDict()
+        self.timings: deque[dict] = deque(maxlen=50)
+
+    def result_key(self, job: Job) -> tuple:
+        # User-scoped, metadata only. No local media files are retained by this cache.
+        return job.user_id, job.action, tuple(upload.file_id for upload in job.uploads)
+
+    def cached_result(self, job: Job) -> CachedResult | None:
+        key = self.result_key(job)
+        item = self.results.get(key)
+        if item and item.expires > time.monotonic():
+            self.results.move_to_end(key)
+            return item
+        self.results.pop(key, None)
+        return None
+
+    def performance(self) -> dict:
+        groups = {}
+        for row in self.timings:
+            group = groups.setdefault(
+                row["action"],
+                {
+                    "jobs": 0,
+                    "cached": 0,
+                    "queue_s": 0,
+                    "download_s": 0,
+                    "convert_s": 0,
+                    "upload_s": 0,
+                },
+            )
+            group["jobs"] += 1
+            group["cached"] += int(row["cached"])
+            for key in ("queue_s", "download_s", "convert_s", "upload_s"):
+                group[key] += row[key]
+        return {
+            action: {
+                key: (round(value / group["jobs"], 3) if key.endswith("_s") else value)
+                for key, value in group.items()
+            }
+            for action, group in groups.items()
+        }
 
     def select_service(self, user_id: int, mode: str) -> None:
         if user_id in self.busy:
@@ -266,6 +317,37 @@ class ConversionService:
             await asyncio.sleep(4)
 
     async def process_files(self, bot: Bot, job: Job, progress: Progress) -> None:
+        queue_seconds = max(0, time.monotonic() - job.queued_at)
+        if cached := self.cached_result(job):
+            progress.stage = "Oldingi tayyor natija Telegram'dan yuborilmoqda…"
+            started = time.monotonic()
+            try:
+                await bot.send_document(
+                    chat_id=job.chat_id,
+                    document=cached.file_id,
+                    filename=cached.filename,
+                    caption=cached.caption,
+                    read_timeout=max(600, self.settings.job_timeout),
+                )
+            except BadRequest:
+                # Telegram may invalidate a file reference. Fall back to normal processing.
+                self.results.pop(self.result_key(job), None)
+            else:
+                self.timings.append(
+                    {
+                        "action": job.action,
+                        "cached": True,
+                        "queue_s": queue_seconds,
+                        "download_s": 0,
+                        "convert_s": 0,
+                        "upload_s": time.monotonic() - started,
+                    }
+                )
+                progress.stage = "Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
+                await self.notify(
+                    bot, job, "✅ Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
+                )
+                return
         with tempfile.TemporaryDirectory(prefix="qulaybot-") as folder:
             root = Path(folder)
             paths = []
@@ -293,6 +375,7 @@ class ConversionService:
                 if path.stat().st_size > self.settings.max_input_bytes:
                     raise MediaError("Fayl belgilangan limitdan katta.")
                 paths.append(path)
+            download_seconds = time.monotonic() - download_started
             logger.info(
                 "Bosqich: %s; olish=%.2fs; fayllar=%d",
                 job.action,
@@ -379,6 +462,7 @@ class ConversionService:
             logger.info(
                 "Bosqich: %s; aylantirish=%.2fs", job.action, time.monotonic() - conversion_started
             )
+            conversion_seconds = time.monotonic() - conversion_started
             if output.stat().st_size > self.settings.max_output_bytes:
                 raise MediaError("Natija juda katta. Kamroq rasm yoki qisqaroq video yuboring.")
             if job.user_id in self.cancelled:
@@ -388,7 +472,7 @@ class ConversionService:
             upload_started = time.monotonic()
             # Video ham fayl sifatida yuboriladi: Telegram qayta siqmaydi.
             if self.settings.local_mode:
-                await bot.send_document(
+                sent = await bot.send_document(
                     chat_id=job.chat_id,
                     document=output.resolve().as_uri(),
                     filename=f"natija.{extension}",
@@ -398,7 +482,7 @@ class ConversionService:
                 )
             else:
                 with output.open("rb") as stream:
-                    await bot.send_document(
+                    sent = await bot.send_document(
                         chat_id=job.chat_id,
                         document=stream,
                         filename=f"natija.{extension}",
@@ -409,6 +493,28 @@ class ConversionService:
             logger.info(
                 "Bosqich: %s; yuborish=%.2fs", job.action, time.monotonic() - upload_started
             )
+            self.timings.append(
+                {
+                    "action": job.action,
+                    "cached": False,
+                    "queue_s": queue_seconds,
+                    "download_s": download_seconds,
+                    "convert_s": conversion_seconds,
+                    "upload_s": time.monotonic() - upload_started,
+                }
+            )
+            if isinstance(
+                file_id := getattr(getattr(sent, "document", None), "file_id", None), str
+            ):
+                self.results[self.result_key(job)] = CachedResult(
+                    file_id,
+                    caption,
+                    f"natija.{extension}",
+                    time.monotonic() + self.settings.session_ttl,
+                )
+                self.results.move_to_end(self.result_key(job))
+                while len(self.results) > 128:
+                    self.results.popitem(last=False)
             # Oxirgi holatni ticker qayta yozib yubormasligi uchun uning matni ham almashtiriladi.
             progress.stage = "Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
             progress.percent = 100 if job.action.startswith("video-") else None

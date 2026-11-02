@@ -16,7 +16,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 from lxml import etree
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -85,13 +85,16 @@ def ink_and_background(image: Image.Image, box: tuple[int, int, int, int]):
             border.append(image.getpixel((xx, yy)))
     background = tuple(int(statistics.median(pixel[i] for pixel in border)) for i in range(3))
     with image.crop((x, y, x + width, y + height)) as crop:
-        pixels = list(crop.get_flattened_data())
-    pixels = pixels[:: max(1, len(pixels) // 2048)]
-    pixels.sort(
-        key=lambda pixel: sum((pixel[i] - background[i]) ** 2 for i in range(3)), reverse=True
-    )
-    ink = pixels[: max(1, len(pixels) // 7)]
-    foreground = tuple(int(statistics.median(pixel[i] for pixel in ink)) for i in range(3))
+        with Image.new("RGB", crop.size, background) as paper:
+            difference = ImageChops.difference(crop, paper).convert("L")
+        peak = difference.getextrema()[1]
+        if peak == 0:
+            difference.close()
+            return background, background
+        mask = difference.point(lambda value: 255 if value >= max(1, peak * 0.7) else 0)
+        foreground = tuple(int(value) for value in ImageStat.Stat(crop, mask).median)
+        difference.close()
+        mask.close()
     return foreground, background
 
 

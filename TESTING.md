@@ -25,6 +25,32 @@ Bu serverdagi haqiqiy Telegram fayli uchun tezlik kafolati emas.
 
 Chek va to'lov topshirig'i foydalanuvchi so'roviga ko'ra ushbu versiyaga qo'shilmadi.
 
+## 0.4.1 tezlik tekshiruvi
+
+2026-11-02 server loglari: pdf-edit 58.75 s hisoblash / 0.23 s yuborish;
+word-layout 50.20 s / 0.12 s; video-144 200.91 s / 0.61 s;
+video-720 488.20 s / 0.97 s. CPU limiti 0.15, RAM 512 MB.
+Bu turli fayllar bo'lib, ular o'zaro benchmark sifatida solishtirilmaydi.
+
+scripts/benchmark-speed.py: 4 video variant x 3 takror. Hozirgi veryfast/2 oqim
+mediani 1.336 s / 448705 bayt; superfast/1 1.688 s / 1003151 bayt;
+ultrafast/1 1.360 s / 1777616 bayt. Tez presetlar MB maqsadini yomonlashtirgani
+va ishonchli tezlik yutug'i bermagani sabab video encoder o'zgartirilmadi.
+
+Yozuv rangini aniqlash: 400 so'z kesmasi x 3 takror median 3.860 s → 0.764 s,
+rangli/oq-qora namunalarda maksimal kanal farqi 0. Butun OCR → Word pipeline
+3.445 s → 3.384 s: farq shovqin oralig'ida; umumiy 5x tezlashish da'vo qilinmaydi.
+Docker OMP_THREAD_LIMIT=1 bilan ko'p oqimli OCR ortiqcha xarajatini cheklaydi.
+Serverning aynan 0.15 CPU sharoitida sobit rasm bilan taqqoslash uchun maxfiy
+diagnostics benchmarki bor; foydalanuvchi topshirig'i paydo bo'lsa to'xtaydi.
+
+Tayyor Telegram natijasi faqat o'sha foydalanuvchi, aynan bir xil fayl ID'lari
+va xizmat uchun 30 daqiqa xotirada qayta ishlatiladi. Kirish fayli olinmagani va
+qayta konvertatsiya bo'lmagani, boshqa foydalanuvchiga o'tmasligi, muddati o'tishi,
+Telegram ID bekor bo'lsa qayta konvertatsiya, tarmoq timeoutida CPU sarflamaslik
+tekshirildi. Diagnostics autentifikatsiyasiz 403 qaytaradi; foydalanuvchi/fayl ID
+chiqarmaydi. Maxfiy kalit va shaxsiy hujjatlar Git'ga kiritilmadi.
+
 ## Joylashuvni saqlaydigan OCR eksporti
 
 0.3.0: PDF ichida ko'rinadigan matn obyektlari, Word ichida tahrirlanadigan matn
