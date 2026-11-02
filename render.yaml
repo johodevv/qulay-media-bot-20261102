@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: qulay-media-bot
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_MODE
+        value: webhook
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: PORT
+        value: "8080"
+      - key: TELEGRAM_EMBEDDED_API
+        value: "true"
+      - key: TELEGRAM_LOCAL_MODE
+        value: "true"
+      - key: TELEGRAM_API_URL
+        value: http://127.0.0.1:8081
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: MAX_INPUT_MB
+        value: "100"
+      - key: MAX_OUTPUT_MB
+        value: "100"
+      - key: FFMPEG_THREADS
+        value: "2"
