@@ -196,9 +196,11 @@ class ConversionService:
             raise MediaError("Topshiriq allaqachon navbatda. Holat: /status")
         session = self.get_session(user_id, nonce)
         if session.uploads[0].kind == "video":
-            if not action.startswith("video-") or not action[6:].isdigit():
+            if action != "video-fast" and (
+                not action.startswith("video-") or not action[6:].isdigit()
+            ):
                 raise MediaError("Video o'lchamini tanlang.")
-            resolution = int(action[6:])
+            resolution = 0 if action == "video-fast" else int(action[6:])
             if resolution not in RESOLUTIONS and resolution != 0:
                 raise MediaError("Video o'lchami noto'g'ri.")
             upload = session.uploads[0]
@@ -414,9 +416,10 @@ class ConversionService:
                 info = await convert_video(
                     paths[0],
                     output,
-                    int(job.action[6:]),
+                    0 if job.action == "video-fast" else int(job.action[6:]),
                     self.settings,
                     on_progress=update_progress,
+                    fast=job.action == "video-fast",
                 )
                 original_size = paths[0].stat().st_size
                 new_size = output.stat().st_size
@@ -425,6 +428,8 @@ class ConversionService:
                     f"Hajm: {original_size / MB:.2f} MB → {new_size / MB:.2f} MB\n"
                     f"{(1 - new_size / original_size) * 100:.0f}% joy tejaldi."
                 )
+                if job.action == "video-fast":
+                    caption += "\n⚡ Tez rejim: ko'pi bilan 360p / 15 kadr/soniya."
             else:
                 progress.stage = (
                     "Rasmdagi matn o'qilmoqda…"
@@ -456,7 +461,10 @@ class ConversionService:
                 if job.action in {"text", "pdf-edit", "word-layout"}:
                     caption += "\nMatnni tekshiring: OCR harf va raqamlarda xato qilishi mumkin."
                 if job.action in {"pdf-edit", "word-layout"}:
-                    caption += "\nTanilgan matn tahrirlanadi. Logo va muhrlar rasm bo'lib qoladi."
+                    caption += (
+                        "\nTanilgan matn tahrirlanadi. Tanilmagan yozuvlar, logo va muhrlar "
+                        "rasm bo'lib qolishi mumkin."
+                    )
                 if job.action == "pdf-edit":
                     caption += "\nMatnni o'zgartirish uchun PDF tahrirlash dasturi kerak."
             logger.info(

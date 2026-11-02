@@ -16,7 +16,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 from lxml import etree
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -37,6 +37,7 @@ class TextBox:
     height: int
     color: tuple[int, int, int]
     bold: bool = False
+    serif: bool = False
 
 
 @dataclass
@@ -54,8 +55,17 @@ class LayoutPage:
         return self.background.height * self.scale
 
 
-@lru_cache(maxsize=2)
-def font_path(bold: bool = False) -> Path:
+@lru_cache(maxsize=4)
+def font_path(bold: bool = False, serif: bool = False) -> Path:
+    if serif:
+        filename = "timesbd.ttf" if bold else "times.ttf"
+        linux = "DejaVuSerif-Bold.ttf" if bold else "DejaVuSerif.ttf"
+        for path in (
+            Path("C:/Windows/Fonts") / filename,
+            Path("/usr/share/fonts/truetype/dejavu") / linux,
+        ):
+            if path.is_file():
+                return path
     candidates = (
         [
             Path("C:/Windows/Fonts/arialbd.ttf"),
@@ -98,11 +108,76 @@ def ink_and_background(image: Image.Image, box: tuple[int, int, int, int]):
     return foreground, background
 
 
+def orient_document(image: Image.Image, settings: Settings) -> Image.Image:
+    """OSD uses glyph shapes, not EXIF (phone photos often lack rotation tags)."""
+    try:
+        orientation = pytesseract.image_to_osd(
+            image, output_type=pytesseract.Output.DICT, timeout=min(settings.job_timeout, 20)
+        )
+    except (RuntimeError, pytesseract.TesseractError):
+        # Sparse pages and artwork do not supply enough glyphs for orientation.
+        return image
+    angle = int(orientation.get("rotate", 0))
+    if angle not in {90, 180, 270} or float(orientation.get("orientation_conf", 0)) < 2.5:
+        return image
+    rotated = image.rotate(-angle, expand=True, fillcolor="white")
+    image.close()
+    return rotated
+
+
+def clean_paper(image: Image.Image) -> Image.Image:
+    """Flatten lighting on neutral paper; retain colored diagrams and seals."""
+    sample = image.copy()
+    sample.thumbnail((64, 64))
+    pixels = list(sample.get_flattened_data())
+    sample.close()
+    paper = [p for p in pixels if max(p) - min(p) < 30 and min(p) > 130]
+    if len(paper) < len(pixels) * 0.72:
+        return image
+    gray = image.convert("L")
+    small = gray.resize((max(1, image.width // 20), max(1, image.height // 20)))
+    light = small.filter(ImageFilter.MaxFilter(7))
+    blurred = light.filter(ImageFilter.GaussianBlur(2))
+    light.close()
+    illumination = blurred.resize(image.size, Image.Resampling.BILINEAR)
+    gray.close()
+    small.close()
+    blurred.close()
+    paper_rgb = Image.merge("RGB", (illumination, illumination, illumination))
+    corrected = ImageChops.subtract(image, paper_rgb, offset=255)
+    neutral = ImageChops.subtract(image.convert("L"), illumination, offset=255)
+    contrast = ImageOps.autocontrast(neutral, cutoff=1)
+    neutral.close()
+    white = contrast.point([min(255, round(value * 255 / 215)) for value in range(256)])
+    contrast.close()
+    channels = image.split()
+    chroma = ImageChops.difference(
+        ImageChops.lighter(ImageChops.lighter(channels[0], channels[1]), channels[2]),
+        ImageChops.darker(ImageChops.darker(channels[0], channels[1]), channels[2]),
+    )
+    mask = chroma.point(lambda value: 255 if value > 40 else 0)
+    cleaned = Image.composite(corrected, white.convert("RGB"), mask)
+    for channel in channels:
+        channel.close()
+    chroma.close()
+    mask.close()
+    white.close()
+    illumination.close()
+    paper_rgb.close()
+    corrected.close()
+    image.close()
+    return cleaned
+
+
 def image_layout(path: Path, settings: Settings) -> LayoutPage:
     if not ocr_available(settings):
         raise MediaError("OCR va tillar serverda sozlanmagan.")
     image = normalized_image(path, settings.max_image_pixels)
     image.thumbnail((1800, 2600), Image.Resampling.LANCZOS)
+    image = orient_document(image, settings)
+    prepared = clean_paper(image)
+    scanned_paper = prepared is not image
+    image = prepared
     # Small phone screenshots benefit from larger glyphs, within the same pixel cap.
     factor = min(
         1800 / image.width, 2600 / image.height, 2 if min(image.width, image.height) < 900 else 1
@@ -130,7 +205,8 @@ def image_layout(path: Path, settings: Settings) -> LayoutPage:
     words = []
     for index, text in enumerate(data["text"]):
         text = "".join(char for char in text.strip() if ord(char) >= 32)
-        if not text or float(data["conf"][index]) < 80 or data["height"][index] < 6:
+        confidence = 80
+        if not text or float(data["conf"][index]) < confidence or data["height"][index] < 6:
             continue
         words.append((index, text))
     if not words:
@@ -147,6 +223,10 @@ def image_layout(path: Path, settings: Settings) -> LayoutPage:
         x, y, width, height = (
             int(data[name][index]) for name in ("left", "top", "width", "height")
         )
+        original_box = (x, y, width, height)
+        if scanned_paper and height > median_height * 1.6:
+            # OCR can combine a text row with a table rule: never stretch that into huge text.
+            continue
         color, fill = ink_and_background(image, (x, y, width, height))
         # Colored seals and artwork remain intact rather than becoming OCR fragments.
         if max(color) - min(color) > 40:
@@ -163,7 +243,9 @@ def image_layout(path: Path, settings: Settings) -> LayoutPage:
             left, top, right, bottom = bounds
             x, y = x + left, y + top
             width, height = right - left, bottom - top
-        candidate = TextBox(text, x, y, width, height, color, height > median_height * 2)
+        candidate = TextBox(
+            text, x, y, width, height, color, height > median_height * 2, scanned_paper
+        )
         _, _, stretch = text_metrics(candidate, 1)
         if not 0.6 <= stretch <= 1.65:
             # Icon fragments and implausible OCR geometry keep their original pixels.
@@ -171,10 +253,10 @@ def image_layout(path: Path, settings: Settings) -> LayoutPage:
         # Low-confidence decorations remain original artwork. Do not invent missing words.
         draw.rectangle(
             (
-                max(0, x - 1),
-                max(0, y - 1),
-                min(image.width - 1, x + width),
-                min(image.height - 1, y + height),
+                max(0, original_box[0] - 1),
+                max(0, original_box[1] - 1),
+                min(image.width - 1, original_box[0] + original_box[2]),
+                min(image.height - 1, original_box[1] + original_box[3]),
             ),
             fill=fill,
         )
@@ -183,17 +265,22 @@ def image_layout(path: Path, settings: Settings) -> LayoutPage:
     if not boxes:
         background.close()
         raise MediaError("Tahrirlanadigan matn topilmadi. Rasm ko'rinishidagi formatni tanlang.")
+    # A few isolated characters on a sideways or unreadable photo are not success.
+    recognized_chars = sum(len(box.text) for box in boxes)
+    if recognized_chars < 12 or len(boxes) < len(words) * 0.5:
+        background.close()
+        raise MediaError("Matn yetarlicha tanilmadi. Hujjatni tik va tiniq suratga olib yuboring.")
     scale = min(0.75, 595 / background.width, 1500 / background.height)
     return LayoutPage(background, boxes, scale)
 
 
-@lru_cache(maxsize=2)
-def reference_font(bold: bool):
-    return ImageFont.truetype(str(font_path(bold)), 100)
+@lru_cache(maxsize=4)
+def reference_font(bold: bool, serif: bool = False):
+    return ImageFont.truetype(str(font_path(bold, serif)), 100)
 
 
 def text_metrics(box: TextBox, scale: float):
-    font = reference_font(box.bold)
+    font = reference_font(box.bold, box.serif)
     left, top, right, bottom = font.getbbox(box.text, anchor="ls")
     fontsize = box.height * scale * 100 / max(1, bottom - top)
     baseline = box.y * scale - top / 100 * fontsize
@@ -203,9 +290,11 @@ def text_metrics(box: TextBox, scale: float):
 
 
 def images_to_editable_pdf(paths: list[Path], output: Path, settings: Settings) -> None:
-    for bold, name in ((False, "EditableRegular"), (True, "EditableBold")):
-        if name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(name, str(font_path(bold))))
+    for serif in (False, True):
+        for bold in (False, True):
+            name = pdf_font_name(bold, serif)
+            if name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(name, str(font_path(bold, serif))))
     document = Canvas(str(output), pageCompression=1)
     for path in paths:
         layout = image_layout(path, settings)
@@ -216,7 +305,7 @@ def images_to_editable_pdf(paths: list[Path], output: Path, settings: Settings) 
             )
             for box in layout.boxes:
                 size, baseline, _ = text_metrics(box, layout.scale)
-                name = "EditableBold" if box.bold else "EditableRegular"
+                name = pdf_font_name(box.bold, box.serif)
                 text = document.beginText(box.x * layout.scale, layout.height - baseline)
                 text.setFont(name, size)
                 text.setFillColorRGB(*(c / 255 for c in box.color))
@@ -228,6 +317,10 @@ def images_to_editable_pdf(paths: list[Path], output: Path, settings: Settings) 
         finally:
             layout.background.close()
     document.save()
+
+
+def pdf_font_name(bold: bool, serif: bool) -> str:
+    return f"Editable{'Serif' if serif else 'Sans'}{'Bold' if bold else 'Regular'}"
 
 
 def add_background(paragraph, layout: LayoutPage):
@@ -306,7 +399,7 @@ def add_textbox(paragraph, box: TextBox, scale: float, index: int):
     run, rpr = OxmlElement("w:r"), OxmlElement("w:rPr")
     fonts = OxmlElement("w:rFonts")
     for key in ("ascii", "hAnsi", "cs", "eastAsia"):
-        fonts.set(qn(f"w:{key}"), "Arial")
+        fonts.set(qn(f"w:{key}"), "Times New Roman" if box.serif else "Arial")
     rpr.append(fonts)
     for tag, value in (
         ("sz", round(size * 2)),

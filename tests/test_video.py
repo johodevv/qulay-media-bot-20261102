@@ -72,6 +72,19 @@ async def test_downscale_portrait_without_audio(ffmpeg_settings, tmp_path):
     assert not result.has_audio
 
 
+@pytest.mark.parametrize("size,expected", [("1920x1080", (640, 360)), ("256x144", (256, 144))])
+async def test_fast_mode_caps_resolution_and_frames_without_upscaling(
+    ffmpeg_settings, tmp_path, size, expected
+):
+    source, output = tmp_path / "fast-source.mp4", tmp_path / "fast.mp4"
+    await make_video(source, ffmpeg_settings, size)
+    info = await convert_video(source, output, 0, ffmpeg_settings, fast=True)
+    assert (info.width, info.height) == expected
+    assert info.fps <= 15 and info.has_audio
+    assert info.duration == pytest.approx(0.6, abs=0.15)
+    assert output.stat().st_size < source.stat().st_size
+
+
 async def test_rotation_metadata_preserves_display_orientation(ffmpeg_settings, tmp_path):
     source, rotated = tmp_path / "input.mp4", tmp_path / "rotated.mp4"
     await make_video(source, ffmpeg_settings, "1280x720")

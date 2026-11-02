@@ -2,6 +2,13 @@
 
 O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va Word.
 
+Tez video rejimi ko'pi bilan 360p / 15 kadr/soniya beradi; harakat kamroq silliq
+bo'ladi. Oddiy o'lcham tanlovi ham saqlangan. Hujjat rasmi avtomatik buriladi va
+neytral qog'oz foni oqartiriladi. Word menyusidagi «Oson tahrirlash — faqat matn»
+oddiy Word matnini chiqaradi; asl joylashuvni saqlamaydi. Joylashuvli PDF/Word'da
+tanilgan matn tahrirlanadi, tanilmagan yozuvlar va chiziqlar rasm bo'lib qolishi
+mumkin. Barcha jadvallar native Word jadvali bo'lishi kafolatlanmaydi.
+
 ## Foydalanish
 
 /start dan keyin pastda doimiy tugmalar chiqadi: Video hajmini kamaytirish,

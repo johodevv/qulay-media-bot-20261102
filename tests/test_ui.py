@@ -23,7 +23,8 @@ def test_main_keyboard_can_toggle_with_native_icon_and_video_menu_only_reduce():
         choice in choices for choice in ("nonce:video-720", "nonce:video-1080", "nonce:video-2160")
     )
     choices = video_keyboard("nonce", 144).inline_keyboard
-    assert len(choices) == 1 and choices[0][0].callback_data == "nonce:video-0"
+    assert choices[0][0].callback_data == "nonce:video-fast"
+    assert choices[1][0].callback_data == "nonce:video-0"
 
 
 def test_truthful_progress_has_no_fake_percentage_during_transfer():
@@ -40,7 +41,9 @@ def test_document_menu_has_one_main_action_and_secondary_options():
         ]
         assert buttons[0].callback_data == f"n:{action}"
         assert "tayyorlash" in buttons[0].text and "OCR" not in buttons[0].text
-        assert buttons[1].callback_data == "n:menu-more"
+        assert buttons[-1].callback_data == "n:menu-more"
+        if mode == "word":
+            assert buttons[1].callback_data == "n:text"
 
 
 async def test_opening_and_closing_other_options_keeps_uploads_out_of_queue(settings):

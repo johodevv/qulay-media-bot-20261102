@@ -1,5 +1,28 @@
 # Tekshiruv holati — 2026-11-02
 
+## 0.4.3: yonboshlagan hujjat va tez video rejimi
+
+Telefon EXIF belgilamagan 90/180/270 gradusli matn OSD orqali to'g'rilanadi.
+Neytral qog'ozdagi yoritish farqi tekislanadi va fon oqartiriladi; rangli muhr
+va tasvir ranglari saqlanadi. Yetarli matn tanilmagan holat muvaffaqiyat deb
+qaytarilmaydi. Jadval chizig'i bilan qo'shilib ketgan baland OCR bloklari ulkan
+harflarga aylantirilmaydi. Word menyusida oddiy, oq sahifadagi tahrirlanadigan
+matn alohida ko'rinadi. Joylashuvli usulda tanilmagan matn rasm bo'lib qoladi;
+bu usul barcha kataklar native Word jadvali bo'lishini kafolatlamaydi.
+
+Mahalliy tekshiruv: 8 s, 1080p/24fps sun'iy video, 3 takror.
+`python scripts/benchmark-decode.py --confirm-fast`: odatiy 720p/24fps median
+5.905 s, 812879 bayt; tez 360p/15fps median 1.816 s, 394404 bayt. Ovoz, davomiylik,
+o'lcham va kirishdan kichikroq hajm tekshirildi. Tez rejim kamroq piksel/kadr beradi.
+Bu Render va katta Telegram fayli uchun vaqt kafolati emas. Ultrafast/superfast
+variantlari hajmni kattalashtirgani uchun standart sozlamaga o'tkazilmadi.
+Xom o'lchovlar ignored test-results katalogida.
+
+To'liq sinovdagi 64 test o'tdi; bitta test double yangi fast argumentini qabul
+qilmagani uchun xato berdi. Test double tuzatilgach hujjat/video/UI/worker bo'yicha
+tegishli qayta tekshiruvlar o'tdi. Ruff va diff tekshiruvi toza. Rasmlar, foydalanuvchi
+PDFi va natija fayllari Git'ga qo'shilmaydi.
+
 Yangi versiya: 49 passed, skip yo'q. Ruff: All checks passed.
 Sinov: python -m pytest -q --junitxml=test-results/pytest.xml.
 

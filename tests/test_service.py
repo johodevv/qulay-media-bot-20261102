@@ -213,7 +213,7 @@ async def test_document_is_not_blocked_by_video(settings, tmp_path, monkeypatch)
     video_started, release_video = asyncio.Event(), asyncio.Event()
     sent = []
 
-    async def convert(source, output, resolution, settings, on_progress=None):
+    async def convert(source, output, resolution, settings, on_progress=None, *, fast=False):
         video_started.set()
         await release_video.wait()
         output.write_bytes(b"video")

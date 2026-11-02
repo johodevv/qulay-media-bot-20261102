@@ -41,6 +41,8 @@ def image_keyboard(
             add("✅ PDF tayyorlash", "pdf-edit" if ocr_enabled else "pdf")
         if mode != "pdf":
             add("✅ Word tayyorlash", "word-layout" if ocr_enabled else "word")
+        if mode == "word" and ocr_enabled:
+            add("📝 Oson tahrirlash — faqat matn", "text")
         if ocr_enabled:
             add("⚙️ Boshqa usullar", "menu-more")
     return InlineKeyboardMarkup(rows)
@@ -56,13 +58,19 @@ def image_prompt(count: int, mode: str, ocr_enabled: bool, *, advanced: bool = F
             "Asosiy usulga qaytish uchun «Orqaga»ni bosing."
         )
     text += (
-        "Tayyor faylda rasmdagi joylashuv saqlanadi, tanilgan yozuvlarni o'zgartira olasiz.\n\n"
+        "Hujjat tiklanadi, qog'oz foni oqartiriladi. "
+        "Tanilgan yozuvlarni o'zgartira olasiz; tanilmagan joylar rasm bo'lib qoladi.\n\n"
         if ocr_enabled
         else "Rasmlar hujjatga joylanadi. Yozuvlar tahrirlanmaydi.\n\n"
     )
     if mode in {"pdf", "word"}:
         label = "PDF" if mode == "pdf" else "Word"
         text += f"Yana rasm qo'shing yoki «{label} tayyorlash»ni bosing."
+        if mode == "word" and ocr_enabled:
+            text += (
+                "\n«Oson tahrirlash» yozuvlarni oddiy Word matniga aylantiradi; "
+                "asl joylashuv va rasmlar saqlanmaydi."
+            )
     else:
         text += "Yana rasm qo'shing yoki PDF / Word tugmasini bosing."
     return text
@@ -74,7 +82,10 @@ def video_keyboard(nonce: str, short_edge: int = 0) -> InlineKeyboardMarkup:
         for value, label in RESOLUTIONS.items()
         if not short_edge or value < short_edge
     ]
-    rows = [buttons[index : index + 3] for index in range(0, len(buttons), 3)]
+    rows = [
+        [InlineKeyboardButton("⚡ Tez rejim · 360p / 15 kadr", callback_data=f"{nonce}:video-fast")]
+    ]
+    rows += [buttons[index : index + 3] for index in range(0, len(buttons), 3)]
     rows.append(
         [InlineKeyboardButton("📦 Faqat hajmni kamaytirish", callback_data=f"{nonce}:video-0")]
     )
@@ -294,6 +305,8 @@ class Handlers:
         else:
             text = (
                 "Video qabul qilindi. Pastroq o'lchamni yoki faqat hajmni kamaytirishni tanlang.\n"
+                "⚡ Tez rejim: ko'pi bilan 360p va 15 kadr/soniya. "
+                "Harakat odatdagidan kamroq silliq bo'ladi.\n"
                 "Tik videoning yo'nalishi saqlanadi."
             )
             short_edge = min(getattr(media, "width", 0), getattr(media, "height", 0))

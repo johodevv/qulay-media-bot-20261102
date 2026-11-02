@@ -119,6 +119,8 @@ def ocr_available(settings: Settings) -> bool:
 
 
 def images_to_text_word(paths: list[Path], output: Path, settings: Settings) -> None:
+    from botapp.document_layout import clean_paper, orient_document
+
     if not ocr_available(settings):
         raise MediaError("Matnni tanish uchun OCR dasturi va til modellari o'rnatilmagan.")
     document = new_document()
@@ -128,6 +130,8 @@ def images_to_text_word(paths: list[Path], output: Path, settings: Settings) -> 
             document.add_page_break()
         with normalized_image(path, settings.max_image_pixels) as image:
             image.thumbnail((2500, 3500), Image.Resampling.LANCZOS)
+            image = orient_document(image, settings)
+            image = clean_paper(image)
             image = ImageOps.autocontrast(image.convert("L"))
             try:
                 text = pytesseract.image_to_string(
@@ -286,17 +290,22 @@ async def convert_video(
     resolution: int,
     settings: Settings,
     on_progress: Callable[[float], None] | None = None,
+    *,
+    fast: bool = False,
 ) -> VideoInfo:
     if not settings.ffmpeg:
         raise MediaError("Video xizmati uchun FFmpeg o'rnatilishi kerak.")
     info = await probe_video(source, settings)
+    if fast:
+        resolution = 360 if min(info.width, info.height) > 360 else 0
     width, height = target_dimensions(info, resolution)
     # Fayl limitidan kichikroq maqsad; oxirida haqiqiy hajm ham tekshiriladi.
     input_bytes = (await asyncio.to_thread(source.stat)).st_size
     total_bitrate = int(min(settings.max_output_bytes, input_bytes) * 8 * 0.85 / info.duration)
     audio_bitrate = min(96000, max(24000, total_bitrate // 4)) if info.has_audio else 0
     video_bitrate = max(16000, total_bitrate - audio_bitrate)
-    filters = f"scale={width}:{height}:flags=fast_bilinear,setsar=1,fps={min(info.fps, 30):.6f}"
+    fps = min(info.fps, 15 if fast else 30)
+    filters = f"scale={width}:{height}:flags=fast_bilinear,setsar=1,fps={fps:.6f}"
     args = [
         settings.ffmpeg,
         "-hide_banner",
