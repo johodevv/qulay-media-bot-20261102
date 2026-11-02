@@ -1,7 +1,29 @@
 # Tekshiruv holati — 2026-11-02
 
-Yangi versiya: 38 passed, skip yo'q. Ruff: All checks passed.
+Yangi versiya: 42 passed, skip yo'q. Ruff: All checks passed.
 Sinov: python -m pytest -q --junitxml=test-results/pytest.xml.
+
+## Joylashuvni saqlaydigan OCR eksporti
+
+0.3.0: PDF ichida ko'rinadigan matn obyektlari, Word ichida tahrirlanadigan matn
+bloklari va sahifa koordinatalari bor. Ustunlar oddiy matn ro'yxatiga aylantirilmaydi.
+Asl rasmning tanilgan yozuvlari fon tasviridan olib tashlanadi; logo va rangli
+bezaklar tasvirligicha qoladi. Ishonchi past yoki mos bo'lmagan geometriyali qismlar
+asl tasvir holida saqlanadi. OCR xatosi ehtimoli va shrift farqi qoladi.
+
+Yangi testlar sun'iy hujjat asosida: PDF'da ko'rinadigan matn va ustun pozitsiyasi,
+Word'da matn bloklari va ikki sahifa, bo'sh rasmda aniq xato, menyu variantlari.
+Shaxsiy hujjatlar test fixtures yoki Git omboriga kiritilmadi.
+
+Haqiqiy namuna bilan mahalliy PDF 2.36 s, Word 1.76 s (bir martalik kuzatuv,
+Telegram transferisiz; server tezligi yoki median natija sifatida talqin qilinmaydi).
+PDF Poppler orqali, Word paketlangan render_docx.py va loyiha ichiga chiqarilgan
+LibreOffice orqali PNG'ga aylantirildi. Bir sahifali namuna va turli o'lchamdagi
+ikki sahifali sun'iy hujjat vizual tekshirildi. Natija OCR aniqligini kafolatlamaydi.
+
+Runtime dependency audit: no known vulnerabilities found. ReportLab bilan PDF
+yaratiladi; og'ir AI/ONNX paketlari runtime requirements'ga kiritilmagan.
+Olish, aylantirish va yuborish vaqtlari alohida loglanadi. Server rejasi Free qoladi.
 
 Tekshirilgan: doimiy ReplyKeyboard, xizmat tanlash, faqat pasaytirish tanlovlari,
 fayl darajasida upscalingni rad etish, FFmpeg haqiqiy foizi, transferda soxta foiz

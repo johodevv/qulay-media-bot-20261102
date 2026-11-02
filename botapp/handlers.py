@@ -21,24 +21,34 @@ logger = logging.getLogger(__name__)
 
 
 def image_keyboard(nonce: str, ocr_enabled: bool, mode: str = "") -> InlineKeyboardMarkup:
-    if mode == "pdf":
-        return InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✅ PDF tayyorlash", callback_data=f"{nonce}:pdf")]]
-        )
-    rows = [
-        [
-            InlineKeyboardButton("📄 PDF", callback_data=f"{nonce}:pdf"),
-            InlineKeyboardButton("📝 Word (rasm)", callback_data=f"{nonce}:word"),
-        ]
-    ]
-    if ocr_enabled:
+    rows = []
+    if mode != "word":
+        if ocr_enabled:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "✍️ PDF — joylashuv va matn (OCR)", callback_data=f"{nonce}:pdf-edit"
+                    )
+                ]
+            )
         rows.append(
-            [InlineKeyboardButton("✍️ Word (tahrirlanadigan matn)", callback_data=f"{nonce}:text")]
+            [InlineKeyboardButton("⚡ PDF — rasm, tahrirlanmaydi", callback_data=f"{nonce}:pdf")]
         )
-    if mode == "word":
-        rows[0] = [
-            InlineKeyboardButton("📝 Word — rasm ko'rinishida", callback_data=f"{nonce}:word")
-        ]
+    if mode != "pdf":
+        if ocr_enabled:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "✍️ Word — joylashuv va matn (OCR)", callback_data=f"{nonce}:word-layout"
+                    )
+                ]
+            )
+            rows.append(
+                [InlineKeyboardButton("📝 Word — faqat matn (OCR)", callback_data=f"{nonce}:text")]
+            )
+        rows.append(
+            [InlineKeyboardButton("⚡ Word — rasm, tahrirlanmaydi", callback_data=f"{nonce}:word")]
+        )
     return InlineKeyboardMarkup(rows)
 
 
@@ -145,9 +155,9 @@ class Handlers:
                 "video": "🎬 Videoni yuboring. "
                 "Keyin pastroq o'lcham yoki hajmni kamaytirishni tanlang.",
                 "pdf": "📄 PDF uchun rasmlarni kerakli tartibda yuboring.\n"
-                "Hammasi qabul qilingach «PDF tayyorlash»ni bosing.",
+                "Keyin joylashuv va matn (OCR) yoki tezkor rasm variantini tanlang.",
                 "word": "📝 Word uchun rasmlarni yuboring.\n"
-                "Keyin rasm ko'rinishi yoki tahrirlanadigan matnni tanlang.",
+                "Keyin joylashuv va matn (OCR), faqat matn yoki rasm variantini tanlang.",
             }
             await message.reply_text(instructions[mode], reply_markup=main_keyboard())
             return
@@ -227,7 +237,7 @@ class Handlers:
         await query.answer()
         try:
             nonce, action = query.data.split(":", 1)
-            if action == "text" and not self.ocr_enabled:
+            if action in {"text", "pdf-edit", "word-layout"} and not self.ocr_enabled:
                 raise MediaError("Matnni tanish hozir sozlanmagan. Word (rasm) ni tanlang.")
             # Eski tugma uchun ortiqcha holat xabari yubormaymiz.
             self.service.get_session(update.effective_user.id, nonce)

@@ -17,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=8080
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg tesseract-ocr tesseract-ocr-uzb tesseract-ocr-uzb-cyrl \
-    tesseract-ocr-rus tesseract-ocr-eng \
+    tesseract-ocr-rus tesseract-ocr-eng fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=bot-api-builder /out/bin/telegram-bot-api /usr/local/bin/telegram-bot-api
 COPY requirements.txt .

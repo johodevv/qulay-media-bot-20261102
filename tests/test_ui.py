@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from botapp.handlers import Handlers, video_keyboard
+from botapp.handlers import Handlers, image_keyboard, video_keyboard
 from botapp.service import ConversionService
 from botapp.ui import PDF, VIDEO, WORD, main_keyboard, progress_text
 
@@ -30,6 +30,15 @@ def test_truthful_progress_has_no_fake_percentage_during_transfer():
     assert "1:05" in progress_text("Kichraytirilmoqda", 42, 65)
     assert "%" not in progress_text("Yuborilmoqda", None, 10)
     assert "⏳" in progress_text("Yuborilmoqda", None, 10)
+
+
+def test_document_menu_distinguishes_layout_ocr_from_image_only():
+    for mode, expected in (("pdf", {"pdf-edit", "pdf"}), ("word", {"word-layout", "text", "word"})):
+        buttons = [
+            button for row in image_keyboard("n", True, mode).inline_keyboard for button in row
+        ]
+        assert {button.callback_data.split(":")[1] for button in buttons} == expected
+        assert any("tahrirlanmaydi" in button.text for button in buttons)
 
 
 async def test_service_selected_before_upload(settings):

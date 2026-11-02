@@ -8,7 +8,13 @@ O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va W
 Rasm → PDF, Rasm → Word, Jarayon holati va Bekor qilish.
 Xizmatni tanlang, fayl yuboring va natijani belgilang. Bir nechta rasmni tartib bilan
 yuborib, barcha rasmlar qabul qilingach tayyorlash tugmasini bosing.
-Word surat yoki OCR orqali tahrirlanadigan matn ko'rinishida chiqadi.
+PDF va Word uchun ikki yo'l bor: tezkor, tahrirlanmaydigan rasm yoki OCR bilan
+joylashuvni saqlagan matn. Word'da faqat matn varianti ham bor.
+OCR variantida tanilgan yozuvlar asl koordinatalariga joylanadi, ustunlar saqlanadi,
+logo va rangli bezaklar tasvir bo'lib qoladi. Aniqlanmagan yoki ishonchi past qismlar
+ham asl tasvir holida qolishi mumkin. Ko'rinish va shrift aynan nusxa bo'lishi
+kafolatlanmaydi. Word matni alohida tahrirlanadigan bloklar ko'rinishida;
+PDF matnini o'zgartirish uchun PDF tahrirlash dasturi kerak.
 
 Video uchun faqat pastroq o'lchamlar yoki faqat hajmni kamaytirish tanlanadi.
 Manba o'lchami ma'lum bo'lsa yuqori tanlovlar ko'rsatilmaydi; fayl tekshirilganda
@@ -36,6 +42,8 @@ uzb_cyrl, rus, eng til modellari kerak. Windows tayyorlash:
 ALLOWED_USER_IDS bilan botni yopiq sinovga cheklash mumkin. Token va API hash .env da
 saqlanadi; Git va Docker kontekstidan chiqarilgan. Odatiy loglarda token chiqarilmaydi.
 OCR natijasidagi ism, sana, raqamlarni tekshiring; murakkab sahifa aynan tiklanmaydi.
+Loglarda faylni olish, aylantirish va yuborish vaqtlari alohida o'lchanadi;
+matn, fayl nomi va foydalanuvchi identifikatorlari bu o'lchovlarga yozilmaydi.
 
 ## 20 MB dan katta fayllar
 

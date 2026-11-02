@@ -13,6 +13,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 from botapp.config import MB, Settings
+from botapp.document_layout import images_to_editable_pdf, images_to_layout_word
 from botapp.media import (
     RESOLUTIONS,
     MediaError,
@@ -152,7 +153,7 @@ class ConversionService:
             if resolution and upload.width and upload.height:
                 if resolution >= min(upload.width, upload.height):
                     raise MediaError("Pastroq o'lchamni yoki «Hajmni kamaytirish»ni tanlang.")
-        elif action not in {"pdf", "word", "text"}:
+        elif action not in {"pdf", "word", "text", "pdf-edit", "word-layout"}:
             raise MediaError("Rasm uchun PDF yoki Word tanlang.")
         job = Job(user_id, chat_id, tuple(session.uploads), action, status_id)
         queue = self.video_queue if action.startswith("video-") else self.queue
@@ -257,6 +258,7 @@ class ConversionService:
         with tempfile.TemporaryDirectory(prefix="qulaybot-") as folder:
             root = Path(folder)
             paths = []
+            download_started = time.monotonic()
             for index, upload in enumerate(job.uploads):
                 if job.user_id in self.cancelled:
                     return
@@ -279,14 +281,21 @@ class ConversionService:
                 if path.stat().st_size > self.settings.max_input_bytes:
                     raise MediaError("Fayl belgilangan limitdan katta.")
                 paths.append(path)
+            logger.info(
+                "Bosqich: %s; olish=%.2fs; fayllar=%d",
+                job.action,
+                time.monotonic() - download_started,
+                len(paths),
+            )
             if job.user_id in self.cancelled:
                 return
             extension = (
                 "mp4"
                 if job.action.startswith("video-")
-                else ("pdf" if job.action == "pdf" else "docx")
+                else ("pdf" if job.action in {"pdf", "pdf-edit"} else "docx")
             )
             output = root / f"natija.{extension}"
+            conversion_started = time.monotonic()
             if job.action.startswith("video-"):
                 progress.stage = "Video kichraytirilmoqda…"
                 progress.percent = 0
@@ -311,15 +320,21 @@ class ConversionService:
             else:
                 progress.stage = (
                     "Rasmdagi matn o'qilmoqda…"
-                    if job.action == "text"
+                    if job.action in {"text", "pdf-edit", "word-layout"}
                     else "Hujjat tayyorlanmoqda…"
                 )
                 function = {
                     "pdf": images_to_pdf,
                     "word": images_to_word,
                     "text": images_to_text_word,
+                    "pdf-edit": images_to_editable_pdf,
+                    "word-layout": images_to_layout_word,
                 }[job.action]
-                argument = self.settings if job.action == "text" else self.settings.max_image_pixels
+                argument = (
+                    self.settings
+                    if job.action in {"text", "pdf-edit", "word-layout"}
+                    else self.settings.max_image_pixels
+                )
                 conversion = asyncio.create_task(
                     asyncio.to_thread(function, paths, output, argument)
                 )
@@ -330,14 +345,22 @@ class ConversionService:
                     await conversion
                     raise
                 caption = f"Tayyor: {len(paths)} ta rasm, {output.stat().st_size / MB:.1f} MB."
-                if job.action == "text":
+                if job.action in {"text", "pdf-edit", "word-layout"}:
                     caption += "\nMatnni tekshiring: OCR harf va raqamlarda xato qilishi mumkin."
+                if job.action in {"pdf-edit", "word-layout"}:
+                    caption += "\nTanilgan matn tahrirlanadi. Logo va muhrlar rasm bo'lib qoladi."
+                if job.action == "pdf-edit":
+                    caption += "\nMatnni o'zgartirish uchun PDF tahrirlash dasturi kerak."
+            logger.info(
+                "Bosqich: %s; aylantirish=%.2fs", job.action, time.monotonic() - conversion_started
+            )
             if output.stat().st_size > self.settings.max_output_bytes:
                 raise MediaError("Natija juda katta. Kamroq rasm yoki qisqaroq video yuboring.")
             if job.user_id in self.cancelled:
                 return
             progress.stage = "Fayl tayyor. Telegram'ga yuborilmoqda…"
             progress.percent = None
+            upload_started = time.monotonic()
             # Video ham fayl sifatida yuboriladi: Telegram qayta siqmaydi.
             if self.settings.local_mode:
                 await bot.send_document(
@@ -358,6 +381,9 @@ class ConversionService:
                         read_timeout=180,
                         write_timeout=180,
                     )
+            logger.info(
+                "Bosqich: %s; yuborish=%.2fs", job.action, time.monotonic() - upload_started
+            )
             # Oxirgi holatni ticker qayta yozib yubormasligi uchun uning matni ham almashtiriladi.
             progress.stage = "Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
             progress.percent = 100 if job.action.startswith("video-") else None

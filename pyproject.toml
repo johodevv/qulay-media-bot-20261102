@@ -1,6 +1,6 @@
 [project]
 name = "qulay-media-bot"
-version = "0.2.0"
+version = "0.3.0"
 description = "Rasm va video bilan ishlaydigan o'zbekcha Telegram bot"
 requires-python = ">=3.12"
 
