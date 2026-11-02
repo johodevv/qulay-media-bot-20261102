@@ -62,6 +62,20 @@ Monitoring: Chrome'da Domain Monitor tablari kuzatildi; UptimeRobot monitori
 tasdiqlanmadi. Domain Monitor shartlari 14 kundan keyin monitorni to'xtatishini
 aytadi. UptimeRobot hisobiga kirish foydalanuvchini kutmoqda.
 
+## UptimeRobot va yig'iladigan menyu
+
+UptimeRobot monitor 804520050 yaratildi: HTTPS /health, har 300 soniya,
+standart bepul sozlamalar. UI'da Current status=Up va Checked every 5m tasdiqlandi.
+Dashboard: https://dashboard.uptimerobot.com/monitors/804520050.
+Boshqa uchta monitor o'zgartirilmadi. Render Free soat va trafik kvotalari qoladi.
+
+0.4.2 kodi: ReplyKeyboardMarkup is_persistent=false, one_time_keyboard=false.
+Telegram klienti klaviatura belgisi bilan menyuni yashirib-ochishi mumkin.
+Belgining dizayni Telegram tomonidan belgilanadi. /menu va /menyu tanlov/rasmlarni
+tozalamasdan menyuni qaytaradi. Tegishli 16 test, keyingi 6 UI testi o'tdi.
+Kod d7b2ccb GitHub'ga yuborilgan. Render Chrome'da login talab qildi;
+ushbu menyu versiyasi hali serverga chiqarilmadi. Joriy runtime 0.4.1 qolmoqda.
+
 ## Joylashuvni saqlaydigan OCR eksporti
 
 0.3.0: PDF ichida ko'rinadigan matn obyektlari, Word ichida tahrirlanadigan matn
