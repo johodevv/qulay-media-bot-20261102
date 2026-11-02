@@ -98,3 +98,5 @@ Benchmark shaxsiy ma'lumotsiz 8 soniyalik sun'iy 1080p videoni 360p ga aylantira
 Har variant 3 marta tekshiriladi: o'lcham, davomiylik, ovoz, kichikroq hajm.
 Bu katta foydalanuvchi videosi yoki Render tezligining o'lchovi emas.
 Natija: test-results/benchmark/results.json. Tafsilotlar: TESTING.md.
+
+Ushbu xizmat public Git URL orqali yaratilgan: Git push avtomatik deployni boshlamaydi. Kelgusi kod yangilanishidan keyin Render Manual Deploy kerak. Docs: https://render.com/docs/deploys.

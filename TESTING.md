@@ -29,8 +29,37 @@ Bu almashinuv ochiq ko'rsatiladi: tezlik va kichraytirish chegarasi birga tekshi
 Haqiqiy yangi pipeline kirish hajmidan kelib chiqqan bitrate limitini ham qo'llaydi;
 aslidan katta fayl foydalanuvchiga yuborilmaydi. 4K ga kattalashtirish olib tashlandi.
 
-Ruff va pytest mahalliy tasdiqlangan. Docker/native API/Render va haqiqiy 100 MB
-Telegram almashinuvi deploydan keyin tekshiriladi; ular hali mahalliy sinov deb
-ko'rsatilmaydi. Natijalar tasdiqlanganda hisobot yangilanadi.
+Ruff va pytest mahalliy tasdiqlangan. Haqiqiy katta faylning Telegram orqali to‘liq almashinuvi foydalanuvchi sinovini kutadi.
 
 Qo‘shimcha tekshiruv: 1900 MB chegarasiga ruxsat faqat local mode bilan; yuqori limit rad etiladi. Faol videoni bekor qilish worker jarayonini o‘ldirmasligi tekshirildi.
+
+
+## Joylashtirish tasdig'i
+
+Render Free, Frankfurt: https://universal-yordamchi-bot.onrender.com.
+Kod: fcb1af9cb85bf8547ff3845036f5b6eb65a93ce7, deploy dep-dbk97vm7bikc739i8ocg — live.
+/health: HTTP 200, status=ok, max_input_mb=1900, local_api=true, version=0.2.0.
+Rasmiy Bot API binari manbadan muvaffaqiyatli qurildi; ishga tushish logi webhook va
+OCR=True ni tasdiqladi. Bu foydalanuvchining 1900 MB fayli bilan sinov bo'lganini anglatmaydi.
+
+Eski cloud Bot API logOut bilan ko'chirildi; kompyuterda shu botning polling jarayoni qolmagan.
+Render muhiti: MAX_INPUT_MB=1900, MAX_OUTPUT_MB=1900, JOB_TIMEOUT_SECONDS=1800.
+Boshqa Render xizmatlari o'zgartirilmadi.
+
+Foydalanuvchi yuborgan skrinshotda Domain Monitor 5 daqiqalik HTTP monitor va Up
+holatini ko'rsatdi. URL skrinshotda ochiq ko'rinmagan; aynan /health ekanini mustaqil
+tekshirish imkoni bo'lmadi. Ushbu servisning forma sahifasi bepul monitoring 14 kundan
+keyin to'xtashini ko'rsatgan. Doimiy UptimeRobot monitori hali tasdiqlanmagan.
+Brauzer boshqaruvi URL xavfsizlik tekshiruvi tomonidan to'xtatildi; undan keyin
+brauzerga avtomatik input berilmadi.
+
+## Yakuniy o'zini baholash
+
+agent-self-evaluation: aniqlik 4/5 (health va 38 test; to'liq 1900 MB trafik sinalmagan),
+to'liqlik 4/5 (asosiy imkoniyatlar va hosting tayyor; uzoq muddatli monitoring kerak),
+tushunarlilik 4/5 (o'zbekcha menyu; haqiqiy foydalanuvchi qulaylik sinovi qolgan),
+amalga tayyorlik 4/5 (bot live; free kvota va tashqi monitor cheklovlari),
+ixchamlik 4/5 (asosiy oqim uch xizmat; texnik qo'llanma batafsil). O'rtacha 4.0/5.
+Keyingi tekshiruv: haqiqiy katta video va rasmni bot orqali yuborish; doimiy bepul
+monitoringni yakunlash. Foydalanuvchi bahoga qo'shilishi kutiladi: tayyor natija va
+uning amaliy chegaralari dalillar bilan ajratilgan.
