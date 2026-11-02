@@ -54,6 +54,7 @@ async def serve(settings: Settings) -> None:
             await application.bot.set_my_commands(
                 [
                     BotCommand("start", "Boshlash va yo'riqnoma"),
+                    BotCommand("menu", "Xizmatlar menyusini ochish"),
                     BotCommand("status", "Topshiriq holati"),
                     BotCommand("cancel", "Tanlovni bekor qilish"),
                     BotCommand("privacy", "Fayllar qanday saqlanadi"),

@@ -6,10 +6,11 @@ from botapp.service import ConversionService
 from botapp.ui import PDF, VIDEO, WORD, main_keyboard, progress_text
 
 
-def test_persistent_main_keyboard_and_video_menu_only_reduce():
+def test_main_keyboard_can_toggle_with_native_icon_and_video_menu_only_reduce():
     keyboard = main_keyboard()
     labels = [button.text for row in keyboard.keyboard for button in row]
-    assert keyboard.is_persistent and keyboard.resize_keyboard
+    assert keyboard.is_persistent is False and keyboard.resize_keyboard
+    assert keyboard.one_time_keyboard is False
     assert all(label in labels for label in (VIDEO, PDF, WORD))
     choices = [
         button.callback_data
@@ -95,3 +96,21 @@ async def test_service_selected_before_upload(settings):
     kwargs = message.reply_text.call_args.kwargs
     assert len(kwargs["reply_markup"].inline_keyboard) == 1
     assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data.endswith(":pdf")
+
+
+async def test_menu_reopens_keyboard_without_clearing_selected_images(settings):
+    from botapp.service import Upload
+
+    service = ConversionService(settings)
+    session = service.add_upload(1, Upload("image", 100, "image"))
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=1),
+        effective_chat=SimpleNamespace(id=1, type="private"),
+        effective_message=message,
+        callback_query=None,
+    )
+    await Handlers(service, settings, True).menu(update, SimpleNamespace())
+    assert service.sessions[1] is session and len(session.uploads) == 1
+    keyboard = message.reply_text.call_args.kwargs["reply_markup"]
+    assert keyboard.is_persistent is False and keyboard.one_time_keyboard is False

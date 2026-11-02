@@ -21,7 +21,8 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[VIDEO], [PDF, WORD], [WORD_PDF, PDF_WORD], [STATUS, CANCEL]],
         resize_keyboard=True,
-        is_persistent=True,
+        is_persistent=False,
+        one_time_keyboard=False,
         input_field_placeholder="Xizmatni tanlang yoki fayl yuboring",
     )
 

@@ -126,6 +126,14 @@ class Handlers:
             reply_markup=main_keyboard(),
         )
 
+    async def menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if await self.allowed(update):
+            await update.effective_message.reply_text(
+                "Xizmatni tanlang. Menyuni xabar qatoridagi klaviatura belgisi bilan "
+                "yashirib yoki qayta ochishingiz mumkin.",
+                reply_markup=main_keyboard(),
+            )
+
     async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self.allowed(update):
             return
@@ -340,6 +348,7 @@ class Handlers:
 
     def register(self, application: Application) -> None:
         application.add_handler(CommandHandler(["start", "help"], self.start))
+        application.add_handler(CommandHandler(["menu", "menyu"], self.menu))
         application.add_handler(CommandHandler("status", self.status))
         application.add_handler(CommandHandler("cancel", self.cancel))
         application.add_handler(CommandHandler("privacy", self.privacy))

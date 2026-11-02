@@ -7,6 +7,8 @@ O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va W
 /start dan keyin pastda doimiy tugmalar chiqadi: Video hajmini kamaytirish,
 Rasm → PDF, Rasm → Word, Word → PDF, PDF → Word,
 Jarayon holati va Bekor qilish.
+Menyuni Telegram xabar qatoridagi klaviatura belgisi bilan yashirib/qayta ochish
+mumkin. /menu yoki /menyu ham tanlov va fayllarni tozalamasdan menyuni qaytaradi.
 Xizmatni tanlang, fayl yuboring va natijani belgilang. Bir nechta rasmni tartib bilan
 yuborib, barcha rasmlar qabul qilingach «PDF tayyorlash» yoki «Word tayyorlash»ni
 bosing. Asosiy tugma joylashuvni saqlaydigan, tanilgan matni tahrirlanadigan
