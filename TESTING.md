@@ -23,6 +23,17 @@ qilmagani uchun xato berdi. Test double tuzatilgach hujjat/video/UI/worker bo'yi
 tegishli qayta tekshiruvlar o'tdi. Ruff va diff tekshiruvi toza. Rasmlar, foydalanuvchi
 PDFi va natija fayllari Git'ga qo'shilmaydi.
 
+Yakuniy tekshiruv: 22 hujjat/UI/worker testi o'tdi. UI izohi yangilangach 15 UI/worker
+testi qayta o'tdi; yonboshlagan oddiy Word matni uchun qo'shimcha tekshiruv bilan
+7 hujjat testi o'tdi. 30fps manbadan tez rejimni tekshirishda 2 video testi o'tdi.
+Mahalliy namunaviy PDF va Word renderlari ko'rildi: oq fon va tik holat tuzalgan,
+lekin ishonchsiz OCR qismlari va jadvalning ayrim matnlari raster bo'lib qolmoqda.
+Bu to'liq avtomatik native jadval tiklash yechimi emas.
+
+Render Free deploy: dep-dbkcitnlk1mc73bgtd70, runtime e376b5142a4ff0df4bd762638c3ca560cec2a88a.
+Deploydan so'ng /health HTTP200: status=ok, version=0.4.3, max_input_mb=1900,
+local_api=true, office_enabled=true. Shu botning worker'lari sog'lom.
+
 Yangi versiya: 49 passed, skip yo'q. Ruff: All checks passed.
 Sinov: python -m pytest -q --junitxml=test-results/pytest.xml.
 

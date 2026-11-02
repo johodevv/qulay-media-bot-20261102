@@ -14,7 +14,7 @@ from botapp.media import (
 )
 
 
-async def make_video(path, settings, size="256x144", audio=True):
+async def make_video(path, settings, size="256x144", audio=True, fps=10):
     args = [
         settings.ffmpeg,
         "-hide_banner",
@@ -24,7 +24,7 @@ async def make_video(path, settings, size="256x144", audio=True):
         "-f",
         "lavfi",
         "-i",
-        f"testsrc2=size={size}:rate=10",
+        f"testsrc2=size={size}:rate={fps}",
     ]
     if audio:
         args += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100"]
@@ -77,7 +77,7 @@ async def test_fast_mode_caps_resolution_and_frames_without_upscaling(
     ffmpeg_settings, tmp_path, size, expected
 ):
     source, output = tmp_path / "fast-source.mp4", tmp_path / "fast.mp4"
-    await make_video(source, ffmpeg_settings, size)
+    await make_video(source, ffmpeg_settings, size, fps=30)
     info = await convert_video(source, output, 0, ffmpeg_settings, fast=True)
     assert (info.width, info.height) == expected
     assert info.fps <= 15 and info.has_audio
