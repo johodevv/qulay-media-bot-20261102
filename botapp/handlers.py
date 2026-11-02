@@ -20,36 +20,51 @@ from botapp.ui import CANCEL, SERVICES, STATUS, main_keyboard
 logger = logging.getLogger(__name__)
 
 
-def image_keyboard(nonce: str, ocr_enabled: bool, mode: str = "") -> InlineKeyboardMarkup:
+def image_keyboard(
+    nonce: str, ocr_enabled: bool, mode: str = "", *, advanced: bool = False
+) -> InlineKeyboardMarkup:
     rows = []
-    if mode != "word":
+
+    def add(label: str, action: str):
+        rows.append([InlineKeyboardButton(label, callback_data=f"{nonce}:{action}")])
+
+    if advanced and ocr_enabled:
+        if mode != "word":
+            add("📄 PDF — rasmli nusxa", "pdf")
+        if mode != "pdf":
+            add("📝 Word — faqat yozuvlar", "text")
+            add("🖼 Word — rasmli nusxa", "word")
+        add("⬅️ Orqaga", "menu-back")
+    else:
+        if mode != "word":
+            add("✅ PDF tayyorlash", "pdf-edit" if ocr_enabled else "pdf")
+        if mode != "pdf":
+            add("✅ Word tayyorlash", "word-layout" if ocr_enabled else "word")
         if ocr_enabled:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        "✍️ PDF — joylashuv va matn (OCR)", callback_data=f"{nonce}:pdf-edit"
-                    )
-                ]
-            )
-        rows.append(
-            [InlineKeyboardButton("⚡ PDF — rasm, tahrirlanmaydi", callback_data=f"{nonce}:pdf")]
-        )
-    if mode != "pdf":
-        if ocr_enabled:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        "✍️ Word — joylashuv va matn (OCR)", callback_data=f"{nonce}:word-layout"
-                    )
-                ]
-            )
-            rows.append(
-                [InlineKeyboardButton("📝 Word — faqat matn (OCR)", callback_data=f"{nonce}:text")]
-            )
-        rows.append(
-            [InlineKeyboardButton("⚡ Word — rasm, tahrirlanmaydi", callback_data=f"{nonce}:word")]
-        )
+            add("⚙️ Boshqa usullar", "menu-more")
     return InlineKeyboardMarkup(rows)
+
+
+def image_prompt(count: int, mode: str, ocr_enabled: bool, *, advanced: bool = False) -> str:
+    text = f"{count} ta rasm qabul qilindi.\n\n"
+    if advanced and ocr_enabled:
+        return text + (
+            "Boshqa usullar:\n"
+            "• Faqat yozuvlar — matnni olish, rasmdagi joylashuv saqlanmaydi.\n"
+            "• Rasmli nusxa — ko'rinish saqlanadi, yozuvlarni o'zgartirib bo'lmaydi.\n\n"
+            "Asosiy usulga qaytish uchun «Orqaga»ni bosing."
+        )
+    text += (
+        "Tayyor faylda rasmdagi joylashuv saqlanadi, tanilgan yozuvlarni o'zgartira olasiz.\n\n"
+        if ocr_enabled
+        else "Rasmlar hujjatga joylanadi. Yozuvlar tahrirlanmaydi.\n\n"
+    )
+    if mode in {"pdf", "word"}:
+        label = "PDF" if mode == "pdf" else "Word"
+        text += f"Yana rasm qo'shing yoki «{label} tayyorlash»ni bosing."
+    else:
+        text += "Yana rasm qo'shing yoki PDF / Word tugmasini bosing."
+    return text
 
 
 def video_keyboard(nonce: str, short_edge: int = 0) -> InlineKeyboardMarkup:
@@ -155,9 +170,9 @@ class Handlers:
                 "video": "🎬 Videoni yuboring. "
                 "Keyin pastroq o'lcham yoki hajmni kamaytirishni tanlang.",
                 "pdf": "📄 PDF uchun rasmlarni kerakli tartibda yuboring.\n"
-                "Keyin joylashuv va matn (OCR) yoki tezkor rasm variantini tanlang.",
+                "Hammasini yuborgach «PDF tayyorlash»ni bosing.",
                 "word": "📝 Word uchun rasmlarni yuboring.\n"
-                "Keyin joylashuv va matn (OCR), faqat matn yoki rasm variantini tanlang.",
+                "Hammasini yuborgach «Word tayyorlash»ni bosing.",
             }
             await message.reply_text(instructions[mode], reply_markup=main_keyboard())
             return
@@ -216,10 +231,7 @@ class Handlers:
             await message.reply_text(str(exc))
             return
         if kind == "image":
-            text = (
-                f"{len(session.uploads)} ta rasm qabul qilindi.\n"
-                "Yana rasm yuboring yoki barcha rasmlar qabul qilingach formatni tanlang."
-            )
+            text = image_prompt(len(session.uploads), session.mode, self.ocr_enabled)
             keyboard = image_keyboard(session.nonce, self.ocr_enabled, session.mode)
         else:
             text = (
@@ -237,10 +249,21 @@ class Handlers:
         await query.answer()
         try:
             nonce, action = query.data.split(":", 1)
+            session = self.service.get_session(update.effective_user.id, nonce)
+            if action in {"menu-more", "menu-back"}:
+                advanced = action == "menu-more"
+                await query.edit_message_text(
+                    text=image_prompt(
+                        len(session.uploads), session.mode, self.ocr_enabled, advanced=advanced
+                    ),
+                    reply_markup=image_keyboard(
+                        nonce, self.ocr_enabled, session.mode, advanced=advanced
+                    ),
+                )
+                return
             if action in {"text", "pdf-edit", "word-layout"} and not self.ocr_enabled:
-                raise MediaError("Matnni tanish hozir sozlanmagan. Word (rasm) ni tanlang.")
+                raise MediaError("Yozuvni tanish hozir ishlamayapti. Rasmni qayta yuboring.")
             # Eski tugma uchun ortiqcha holat xabari yubormaymiz.
-            self.service.get_session(update.effective_user.id, nonce)
             status = await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="Topshiriq navbatga qabul qilindi. Natija shu chatga yuboriladi.",

@@ -7,7 +7,10 @@ O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va W
 /start dan keyin pastda doimiy tugmalar chiqadi: Video sifatini pasaytirish,
 Rasm → PDF, Rasm → Word, Jarayon holati va Bekor qilish.
 Xizmatni tanlang, fayl yuboring va natijani belgilang. Bir nechta rasmni tartib bilan
-yuborib, barcha rasmlar qabul qilingach tayyorlash tugmasini bosing.
+yuborib, barcha rasmlar qabul qilingach «PDF tayyorlash» yoki «Word tayyorlash»ni
+bosing. Asosiy tugma joylashuvni saqlaydigan, tanilgan matni tahrirlanadigan
+natijani beradi. Kamroq ishlatiladigan variantlar «Boshqa usullar» ichida;
+«Orqaga» rasmlarni yo'qotmasdan asosiy tugmaga qaytaradi.
 PDF va Word uchun ikki yo'l bor: tezkor, tahrirlanmaydigan rasm yoki OCR bilan
 joylashuvni saqlagan matn. Word'da faqat matn varianti ham bor.
 OCR variantida tanilgan yozuvlar asl koordinatalariga joylanadi, ustunlar saqlanadi,
