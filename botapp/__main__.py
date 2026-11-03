@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 async def serve(settings: Settings) -> None:
+    if settings.mode == "standby":
+        await serve_standby(settings)
+        return
     builder = (
         Application.builder()
         .token(settings.token)
@@ -89,6 +92,29 @@ async def serve(settings: Settings) -> None:
                 await service.stop()
     finally:
         state["ready"] = False
+        await runner.cleanup()
+
+
+async def serve_standby(settings: Settings) -> None:
+    """Keep the former host observable without logging the bot in twice."""
+    application = Application.builder().token(settings.token).build()
+    runner = web.AppRunner(
+        create_web_app(application, settings, {"ready": True, "standby": True}),
+        access_log=None,
+    )
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", settings.port).start()
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except NotImplementedError:
+            pass
+    logger.info("Zaxira rejimi: bu server Telegram botini ishga tushirmaydi.")
+    try:
+        await stop.wait()
+    finally:
         await runner.cleanup()
 
 

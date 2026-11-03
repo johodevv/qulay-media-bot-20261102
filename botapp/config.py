@@ -119,8 +119,8 @@ class Settings:
     def validate(self, require_token: bool = True) -> None:
         if require_token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", self.token):
             raise ValueError(".env faylidagi BOT_TOKEN ga BotFather tokenini yozing.")
-        if self.mode not in {"polling", "webhook"}:
-            raise ValueError("BOT_MODE faqat polling yoki webhook bo'ladi.")
+        if self.mode not in {"polling", "webhook", "standby"}:
+            raise ValueError("BOT_MODE faqat polling, webhook yoki standby bo'ladi.")
         if not 1 <= self.port <= 65535:
             raise ValueError("PORT 1 va 65535 orasida bo'lishi kerak.")
         if self.api_url:

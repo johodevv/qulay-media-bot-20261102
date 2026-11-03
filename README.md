@@ -2,6 +2,14 @@
 
 O'zbekcha Telegram bot: video o'lchami va hajmini pasaytirish, rasm → PDF va Word.
 
+Hostlar o'rtasida ko'chirish: eski webhook hostidagi autentifikatsiyalangan
+`POST /diagnostics/handoff` faqat ishlar tugagach webhookni navbatni o'chirmasdan
+uzadi va mahalliy Bot API sessiyasini yopadi. Keyin eski hostni `BOT_MODE=standby`
+bilan qayta chiqaring: u /health'da `standby` deydi va Telegram'ga ulanmaydi.
+Yangi VPS `BOT_MODE=polling` bilan ishlaydi. Ikkita faol bot nusxasini ishga tushirmang.
+Local Bot API ishga tushganidan dastlabki 10 daqiqa ichida close() rad etilishi mumkin;
+handoff xatosida oldingi webhook tiklanadi. Standby zaxirani avtomatik yoqmaydi.
+
 Tez video rejimi ko'pi bilan 360p / 15 kadr/soniya beradi; harakat kamroq silliq
 bo'ladi. Oddiy o'lcham tanlovi ham saqlangan. Hujjat rasmi avtomatik buriladi va
 neytral qog'oz foni oqartiriladi. Word menyusidagi «Oson tahrirlash — faqat matn»
