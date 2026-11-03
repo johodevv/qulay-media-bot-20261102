@@ -109,3 +109,24 @@ async def test_standby_is_observable_but_cannot_take_over_telegram(settings):
                 "/diagnostics/handoff", headers={"X-Diagnostics-Token": settings.webhook_secret}
             )
         ).status == 409
+
+
+async def test_polling_handoff_stops_receiver_before_closing_local_session(settings):
+    settings = replace(settings, mode="polling", local_mode=True, webhook_secret="a" * 32)
+    events = []
+
+    async def stop():
+        events.append("stop")
+
+    async def close():
+        events.append("close")
+
+    updater = SimpleNamespace(running=True, stop=AsyncMock(side_effect=stop))
+    bot = SimpleNamespace(delete_webhook=AsyncMock(), close=AsyncMock(side_effect=close))
+    application = SimpleNamespace(bot=bot, updater=updater, update_queue=asyncio.Queue())
+    state = {"ready": True}
+    async with TestClient(TestServer(create_web_app(application, settings, state))) as client:
+        response = await client.post(
+            "/diagnostics/handoff", headers={"X-Diagnostics-Token": settings.webhook_secret}
+        )
+        assert response.status == 200 and events == ["stop", "close"]
