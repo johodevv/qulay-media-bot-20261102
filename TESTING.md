@@ -217,3 +217,17 @@ uning amaliy chegaralari dalillar bilan ajratilgan.
   alohida sahifada, matn tanlanadi, title ostidagi template border olib tashlandi.
 - Render Free bazasi vaqtinchalik. Doimiy diskli VPS yoki /backup + /restore
   kerak; restart/deploydan keyingi avtomatik saqlanish kafolatlanmaydi.
+
+### Jonli tekshiruv
+
+- Render: srv-dbk8rvetlv9c73f6o450 / javohir's workspace.
+- Commit: 8cd84b7081709754e1c4cb2c6fc561f9694502d4.
+- Deploy: dep-dc274cu7bikc738mfg7g, live 2026-11-23 17:28:27 UTC.
+- /health: HTTP 200, status ok, version 0.5.0, local_api true, limit 1900 MB.
+- Telegram getMyCommands: start/menu/status/quiz/id/admin/cancel/privacy.
+- Runtime: ichki Bot API tayyor, webhook mode, OCR True.
+- Owner ID environment orqali sozlandi; kodga token, API hash yoki parol qo'shilmadi.
+- Skanerlangan ikki savolli sun'iy PDF: OCR True, javoblar A/B to'g'ri,
+  mahalliy sinov 1.75 s. Bu Render tezligining o'lchovi emas.
+- Foydalanuvchi hisobidan jonli PDF yuborish amalga oshirilmadi; Telegram
+  handler oqimi mock bot bilan sinovdan o'tgan.
