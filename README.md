@@ -91,7 +91,8 @@ matn, fayl nomi va foydalanuvchi identifikatorlari bu o'lchovlarga yozilmaydi.
 faollik, ism, username, ID va oxirgi faol vaqt ko'rinadi. Hisob yangi versiya ishga
 tushgandan boshlanadi; eski chatlar Telegram orqali orqaga yig'ilmaydi.
 Faqat bosh admin `/addadmin ID` va `/removeadmin ID` bilan huquq beradi / oladi;
-yangi admin avval botga `/start` yuborishi kerak. Oddiy admin faqat panelni ko'radi.
+raqamli Telegram ID orqali yangi adminni oldindan qo'shish mumkin. Admin
+panelini ochish uchun yangi admin botga `/start` yuboradi. Oddiy admin faqat panelni ko'radi.
 
 «Word / PDFdan test» yoki `/quiz` tugmasidan savol-javobli Word (.docx) yoki PDF
 yuboring. Ketma-ket yuborilgan fayllar navbatdan o'tib, har biri alohida test bo'ladi.
@@ -111,6 +112,8 @@ ishlash, Word yoki PDFga olish mumkin. Kalit bo'lmasa oddiy testdan foydalanilad
 AI rejimidagi fayl matni Google'ga yuboriladi. Maxfiy hujjatlarni yubormang.
 Standart model `gemini-3.1-flash-lite`. Bot odatda 24 soatda 10 AI topshirig'ini
 qabul qiladi. Vaqtinchalik server xatosida har bosqich bir marta qayta sinanadi.
+Gemini javob bermasa, aniq savol-javoblari bor fayldan oddiy test tayyorlanadi
+va natijada qaysi usul ishlatilgani yoziladi.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
 `Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
 kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.

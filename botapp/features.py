@@ -19,7 +19,12 @@ from telegram import Update
 from telegram.error import BadRequest, TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, TypeHandler
 
-from botapp.gemini_quiz import AI_MAX_QUESTIONS, generate_document_quiz, sample_text_sections
+from botapp.gemini_quiz import (
+    AI_MAX_QUESTIONS,
+    GeminiUnavailable,
+    generate_document_quiz,
+    sample_text_sections,
+)
 from botapp.media import MediaError
 from botapp.quiz import (
     LABELS,
@@ -27,6 +32,7 @@ from botapp.quiz import (
     export_quiz,
     extract_quiz_docx_rows,
     extract_quiz_pages,
+    parse_document_questions,
     read_quiz_docx,
     read_quiz_pdf,
     read_quiz_text,
@@ -176,7 +182,7 @@ class FeatureHandlers:
                 chat_id=update.effective_chat.id,
                 text=("Admin qilinadigan" if action == "add" else "Adminlikdan olinadigan")
                 + " foydalanuvchining Telegram ID yoki @username'ini yuboring.\n"
-                "U avval botga /start yuborgan bo'lsin. Bekor qilish: /cancel",
+                "Raqamli ID bilan oldindan ham qo'shish mumkin. Bekor qilish: /cancel",
             )
             return
         await query.answer()
@@ -426,9 +432,9 @@ class FeatureHandlers:
                         kind = AI_UPLOADS.get(action, "docx" if action == "parse-word" else "pdf")
                         path = root / f"input.{kind}"
                         await self.download(bot, value, path)
-                        sampled = False
+                        ai_note = ""
                         if action in AI_UPLOADS:
-                            questions, scanned, sampled = await self.ai_questions(
+                            questions, scanned, ai_note = await self.ai_questions(
                                 user_id, path, kind, status
                             )
                         else:
@@ -454,10 +460,7 @@ class FeatureHandlers:
                             )
                         if questions[0].get("source_variant"):
                             note += "\nA/B/C/D variantlari manba matnidan tuzildi."
-                        if action in AI_UPLOADS:
-                            note += "\n✨ Gemini javoblarni manba matni bilan solishtirdi."
-                        if sampled:
-                            note += "\nSavollar uzun faylning turli qismlari asosida tuzildi."
+                        note += ai_note
                         first = questions[0]
                         preview = f"\n\nBirinchi savol: {first['question']}\n" + "\n".join(
                             f"{LABELS[i]}) {option}"
@@ -519,14 +522,42 @@ class FeatureHandlers:
         async def show_review():
             await self._status(status, "⏳ Gemini javoblarni manba bilan solishtiryapti…")
 
-        questions = await generate_document_quiz(
-            pages,
-            settings,
-            lambda: self.store.reserve_gemini_job(user_id, settings.gemini_jobs_per_day),
-            show_review,
-            source_kind=kind,
-        )
-        return questions, scanned, sampled
+        try:
+            questions = await generate_document_quiz(
+                pages,
+                settings,
+                lambda: self.store.reserve_gemini_job(user_id, settings.gemini_jobs_per_day),
+                show_review,
+                source_kind=kind,
+            )
+        except GeminiUnavailable as exc:
+            if kind != "docx":
+                plain = pages if kind == "pdf" else [text]
+                rows = [
+                    (line.strip(), False)
+                    for page in plain
+                    for line in page.splitlines()
+                    if line.strip()
+                ]
+            try:
+                parsed = await self.thread(
+                    lambda: parse_document_questions(rows, pdf=kind != "docx")
+                )
+                questions = await self.thread(make_variant_questions, parsed)
+            except MediaError:
+                raise MediaError(
+                    f"{exc} Oddiy test uchun faylda "
+                    "savollar va javoblar belgilangan bo'lishi kerak."
+                ) from None
+            return (
+                questions,
+                scanned,
+                "\nGemini hozir javob bermadi. Oddiy test fayldagi savol-javoblardan tayyorlandi.",
+            )
+        note = "\n✨ Gemini javoblarni manba matni bilan solishtirdi."
+        if sampled:
+            note += "\nSavollar uzun faylning turli qismlari asosida tuzildi."
+        return questions, scanned, note
 
     async def download(self, bot, file_id, output):
         remote = await bot.get_file(file_id, read_timeout=90)

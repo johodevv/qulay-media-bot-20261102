@@ -38,7 +38,7 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
                 "local_api": settings.local_mode,
                 "office_enabled": bool(settings.soffice),
                 "gemini_configured": bool(settings.gemini_api_key),
-                "version": "0.5.5",
+                "version": "0.5.6",
             },
             status=200 if ready or handoff else 503,
         )

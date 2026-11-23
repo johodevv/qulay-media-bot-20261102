@@ -186,3 +186,26 @@ async def test_gemini_document_flows_through_bot_and_uses_existing_quiz_menu(
         assert max(map(int, calls[0]["pages"])) > len(calls[0]["pages"])
     with pytest.raises(MediaError, match="bir daqiqa"):
         store.reserve_gemini_job(77, 10)
+
+
+@pytest.mark.asyncio
+async def test_gemini_overload_returns_labelled_local_test_for_word(
+    tmp_path, settings, monkeypatch
+):
+    settings = replace(settings, gemini_api_key="test-only-key")
+    calls = mock_gemini(monkeypatch, None, None, status=503)
+    store = BotStore(tmp_path / "store.sqlite", 77)
+    handlers = Handlers(ConversionService(settings), settings, False, store)
+    path = tmp_path / "questions.docx"
+    doc = Document()
+    doc.add_paragraph(SOURCE)
+    for line in ("1. Bir haftada necha kun?", "A) Olti B) Yetti C) Sakkiz D) Besh", "Javob: B"):
+        doc.add_paragraph(line)
+    doc.save(path)
+    questions, scanned, note = await handlers.features.ai_questions(
+        77, path, "docx", SimpleNamespace(edit_text=AsyncMock())
+    )
+    assert len(calls) == 2
+    assert not scanned
+    assert "Oddiy test" in note and "solishtirdi" not in note
+    assert questions[0]["options"][questions[0]["correct"]] == "Yetti"

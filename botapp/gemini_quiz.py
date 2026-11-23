@@ -17,6 +17,11 @@ AI_MAX_QUESTIONS = 12
 AI_MAX_CHARACTERS = 60_000
 AI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 
+
+class GeminiUnavailable(MediaError):
+    """The provider cannot complete this request right now."""
+
+
 _STRING = {"type": "string"}
 _INDEX = {"type": "integer", "minimum": 0, "maximum": 3}
 _DRAFT_FIELDS = {
@@ -139,9 +144,11 @@ async def _generate_json(
                     if not attempt and response.status_code in {500, 502, 503, 504}:
                         continue
                     if response.status_code == 429:
-                        raise MediaError(
+                        raise GeminiUnavailable(
                             "Gemini limiti vaqtincha to'ldi. Birozdan keyin urinib ko'ring."
                         )
+                    if response.status_code >= 500:
+                        raise GeminiUnavailable("Google Gemini hozir band. Keyinroq qayta sinang.")
                     if response.status_code in {401, 403}:
                         raise MediaError("Gemini ulanishini bot administratori tekshirishi kerak.")
                     if response.is_error or response.is_redirect:
@@ -164,7 +171,7 @@ async def _generate_json(
         )
         return json.loads(content)
     except (TimeoutError, httpx.RequestError) as exc:
-        raise MediaError(
+        raise GeminiUnavailable(
             "Gemini javobi kechikdi. Keyinroq yoki oddiy test rejimida sinang."
         ) from exc
     except (ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:

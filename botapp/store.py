@@ -83,34 +83,33 @@ class BotStore:
             return bool(db.execute("SELECT 1 FROM admins WHERE id=?", (user_id,)).fetchone())
 
     def resolve_user(self, value: str) -> int:
+        if value.isascii() and value.isdecimal() and len(value) <= 16:
+            user_id = int(value)
+            if 0 < user_id < 2**52:
+                return user_id
+        if not (len(value) > 1 and value.startswith("@")):
+            raise MediaError("To'g'ri Telegram ID yoki @username yuboring.")
         with self.db() as db:
-            if value.isdecimal() and 0 < int(value) < 2**52:
-                row = db.execute("SELECT id FROM users WHERE id=?", (int(value),)).fetchone()
-            elif value.startswith("@"):
-                matches = db.execute(
-                    "SELECT id FROM users WHERE lower(username)=?", (value[1:].lower(),)
-                ).fetchall()
-                if len(matches) > 1:
-                    raise MediaError(
-                        "Username bir nechta yozuvda bor. Telegram ID raqamini yuboring."
-                    )
-                row = matches[0] if matches else None
-            else:
-                row = None
-        if row is None:
+            matches = db.execute(
+                "SELECT id FROM users WHERE lower(username)=?", (value[1:].lower(),)
+            ).fetchall()
+        if len(matches) > 1:
+            raise MediaError("Username bir nechta yozuvda bor. Telegram ID raqamini yuboring.")
+        if not matches:
             raise MediaError(
-                "Bu foydalanuvchi topilmadi. Avval botga /start yuborsin va /id olsin."
+                "Username ro'yxatda topilmadi. Uning raqamli Telegram ID'sini yuboring."
             )
-        return row["id"]
+        return matches[0]["id"]
 
     def change_admin(self, actor: int, target: int, *, add: bool) -> None:
         if not self.owner_id or actor != self.owner_id:
             raise MediaError("Adminlarni faqat bosh admin boshqaradi.")
+        if type(target) is not int or not 0 < target < 2**52:
+            raise MediaError("Telegram ID noto'g'ri.")
         if target == self.owner_id:
             raise MediaError("Bosh admin huquqi doim saqlanadi.")
         with self.db() as db:
-            if not db.execute("SELECT 1 FROM users WHERE id=?", (target,)).fetchone():
-                raise MediaError("Yangi admin avval botga /start yuborsin.")
+            db.execute("BEGIN IMMEDIATE")
             if add:
                 if db.execute("SELECT count(*) FROM admins").fetchone()[0] >= 50:
                     raise MediaError("Ko'pi bilan 50 ta qo'shimcha admin bo'lishi mumkin.")
@@ -208,9 +207,7 @@ class BotStore:
                     raise ValueError
             if not isinstance(admins, list) or len(admins) > 51:
                 raise ValueError
-            if any(
-                type(value) is not int or value not in ids | {self.owner_id} for value in admins
-            ):
+            if any(type(value) is not int or not 0 < value < 2**52 for value in admins):
                 raise ValueError
             started = float(payload["started"])
             if not math.isfinite(started) or not 0 <= started <= now + 86400:

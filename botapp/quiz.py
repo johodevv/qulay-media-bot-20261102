@@ -77,7 +77,7 @@ def extract_quiz_docx_rows(path: Path) -> list[tuple[str, bool]]:
 
 
 def read_quiz_docx(path: Path) -> dict:
-    return {"questions": _parse_document_questions(extract_quiz_docx_rows(path)), "scanned": False}
+    return {"questions": parse_document_questions(extract_quiz_docx_rows(path)), "scanned": False}
 
 
 def read_quiz_text(path: Path) -> str:
@@ -99,7 +99,7 @@ def read_quiz_text(path: Path) -> str:
     return text
 
 
-def _parse_document_questions(rows: list[tuple[str, bool]], *, pdf: bool = False) -> list[dict]:
+def parse_document_questions(rows: list[tuple[str, bool]], *, pdf: bool = False) -> list[dict]:
     starts = []
     for index, (text, highlighted) in enumerate(rows):
         number = _QUESTION.fullmatch(text)
@@ -394,7 +394,7 @@ def extract_quiz_pages(path: Path, settings: Settings) -> tuple[list[str], bool]
 def read_quiz_pdf(path: Path, settings: Settings) -> dict:
     pages, scanned = extract_quiz_pages(path, settings)
     rows = [(line.strip(), False) for page in pages for line in page.splitlines() if line.strip()]
-    return {"questions": _parse_document_questions(rows, pdf=True), "scanned": scanned}
+    return {"questions": parse_document_questions(rows, pdf=True), "scanned": scanned}
 
 
 def export_quiz(questions: list[dict], output: Path, kind: str) -> None:

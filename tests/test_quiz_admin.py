@@ -71,6 +71,21 @@ def test_tracking_deduplicates_and_backup_restores_atomically(tmp_path):
             action(22)
 
 
+def test_only_owner_can_add_an_unseen_id_and_restore_its_role(tmp_path):
+    store = make_store(tmp_path)
+    user_id = store.resolve_user("1020304050")
+    with pytest.raises(MediaError):
+        store.change_admin(22, user_id, add=True)
+    store.change_admin(11, user_id, add=True)
+    assert store.is_admin(user_id)
+    assert store.statistics()["total"] == 3
+    restored = BotStore(tmp_path / "restored.sqlite", 11)
+    restored.restore_metadata(11, store.export_metadata(11))
+    assert restored.is_admin(user_id)
+    restored.change_admin(11, user_id, add=False)
+    assert not restored.is_admin(user_id)
+
+
 @pytest.mark.parametrize(
     "body",
     [
