@@ -57,18 +57,19 @@ async def serve(settings: Settings) -> None:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(local_api_server(settings, stop))
             await stack.enter_async_context(application)
-            await application.bot.set_my_commands(
-                [
-                    BotCommand("start", "Boshlash va yo'riqnoma"),
-                    BotCommand("menu", "Xizmatlar menyusini ochish"),
-                    BotCommand("status", "Topshiriq holati"),
-                    BotCommand("quiz", "Word yoki PDFdan test tayyorlash"),
-                    BotCommand("id", "Telegram ID raqamim"),
-                    BotCommand("admin", "Admin paneli"),
-                    BotCommand("cancel", "Tanlovni bekor qilish"),
-                    BotCommand("privacy", "Fayllar qanday saqlanadi"),
-                ]
-            )
+            commands = [
+                BotCommand("start", "Boshlash va yo'riqnoma"),
+                BotCommand("menu", "Xizmatlar menyusini ochish"),
+                BotCommand("status", "Topshiriq holati"),
+                BotCommand("quiz", "Word yoki PDFdan test tayyorlash"),
+                BotCommand("id", "Telegram ID raqamim"),
+                BotCommand("admin", "Admin paneli"),
+                BotCommand("cancel", "Tanlovni bekor qilish"),
+                BotCommand("privacy", "Fayllar qanday saqlanadi"),
+            ]
+            if settings.gemini_api_key:
+                commands.append(BotCommand("aiquiz", "Gemini bilan PDFdan test"))
+            await application.bot.set_my_commands(commands)
             await service.start(application.bot)
             await application.start()
             try:

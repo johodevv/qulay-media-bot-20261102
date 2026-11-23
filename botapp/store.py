@@ -41,6 +41,9 @@ class BotStore:
                 );
                 CREATE INDEX IF NOT EXISTS users_last_seen ON users(last_seen DESC);
                 CREATE INDEX IF NOT EXISTS quiz_expiration ON quizzes(expires);
+                CREATE TABLE IF NOT EXISTS gemini_jobs(
+                    user_id INTEGER NOT NULL, started REAL NOT NULL
+                );
             """)
             db.execute("INSERT OR IGNORE INTO meta VALUES('started', ?)", (str(time.time()),))
 
@@ -235,6 +238,19 @@ class BotStore:
                 "UPDATE meta SET value=min(cast(value AS REAL),?) WHERE key='started'", (started,)
             )
         return len(users)
+
+    def reserve_gemini_job(self, user_id: int, limit: int) -> None:
+        now = time.time()
+        with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("DELETE FROM gemini_jobs WHERE started < ?", (now - 86400,))
+            if db.execute("SELECT count(*) FROM gemini_jobs").fetchone()[0] >= limit:
+                raise MediaError("Botning AI sinov limiti to'ldi. Oddiy test rejimini ishlating.")
+            if db.execute(
+                "SELECT 1 FROM gemini_jobs WHERE user_id=? AND started>?", (user_id, now - 60)
+            ).fetchone():
+                raise MediaError("Yana AI test yuborishdan oldin bir daqiqa kuting.")
+            db.execute("INSERT INTO gemini_jobs VALUES(?,?)", (user_id, now))
 
     def save_quiz(self, user_id: int, questions: list[dict], scanned: bool) -> str:
         quiz_id = secrets.token_hex(6)

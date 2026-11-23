@@ -100,6 +100,16 @@ bot manbadan A/B/C/D variantlarini tuzadi va ballni o'zi hisoblaydi. Uzun javobd
 manbadan olingan gapdagi bo'sh joy to'ldiriladi. Asl javob Telegramda tanlovdan
 keyin yuklab olinadi. «Word test» va «PDF test» varaqalarida javob variantlari
 va oxirida alohida javob kaliti bor.
+
+Ixtiyoriy **Gemini bilan PDF testi** uchun hostingda `GEMINI_API_KEY` ni sozlang.
+`/aiquiz` orqali oddiy o'quv matni yoki savol-javobli PDFdan 12 tagacha
+variantli savol tayyorlash mumkin. Bot PDFdan matn oladi, Gemini'dan savol tuzish
+va javob kalitini qayta tekshirishni so'raydi. Manbada topilmagan iqtibos yoki zid
+tekshiruvli savol chiqarilmaydi. Matn limiti 60 ming belgi. Natijani Telegramda
+ishlash, Word yoki PDFga olish mumkin. Kalit bo'lmasa oddiy testdan foydalaniladi.
+AI rejimidagi PDF matni Google'ga yuboriladi. Maxfiy hujjatlarni yubormang.
+Standart model `gemini-3.1-flash-lite`. Bot odatda 24 soatda 10 AI topshirig'ini
+qabul qiladi, har biriga ko'pi bilan 2 ta API so'rovi ketadi.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
 `Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
 kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.

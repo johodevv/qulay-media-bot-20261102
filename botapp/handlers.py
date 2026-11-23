@@ -108,7 +108,10 @@ class Handlers:
         self.features = FeatureHandlers(self, store) if store else None
 
     def keyboard(self, user_id: int):
-        return main_keyboard(bool(self.features and self.features.store.is_admin(user_id)))
+        return main_keyboard(
+            bool(self.features and self.features.store.is_admin(user_id)),
+            ai_enabled=bool(self.features and self.settings.gemini_api_key),
+        )
 
     async def allowed(self, update: Update) -> bool:
         user, chat = update.effective_user, update.effective_chat
@@ -164,7 +167,9 @@ class Handlers:
         user_id = update.effective_user.id
         if self.features and user_id in self.features.tasks:
             text = "⏳ Test topshirig'i bajarilmoqda yoki navbatda. Natija shu chatga yuboriladi."
-        elif (session := self.service.sessions.get(user_id)) and session.mode == "quiz":
+        elif (session := self.service.sessions.get(user_id)) and session.mode == "quiz-ai":
+            text = "✨ Gemini testi uchun PDF yuboring."
+        elif session and session.mode == "quiz":
             text = "🧩 Savol-javobli Word (.docx) yoki PDF yuboring."
         else:
             text = self.service.status_text(user_id)
@@ -193,7 +198,9 @@ class Handlers:
                 "ularni bot adminlari ko'radi. Telefon raqamingiz olinmaydi. "
                 "Test savollari va natijasi 24 soat amal qiladi; eskirgan ma'lumotlar "
                 "keyingi murojaatda o'chiriladi. "
-                "Foydalanuvchilar ro'yxati zaxirasi faqat bosh adminga beriladi."
+                "Foydalanuvchilar ro'yxati zaxirasi faqat bosh adminga beriladi.\n\n"
+                "Gemini bilan test rejimida PDFdan o'qilgan matn Google'ga yuboriladi. "
+                "Shu rejimga maxfiy va shaxsiy ma'lumotli fayl yubormang."
             )
 
     async def receive(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

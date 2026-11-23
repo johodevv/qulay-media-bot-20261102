@@ -314,13 +314,15 @@ def parse_questions(text: str) -> list[dict]:
     return parsed
 
 
-def read_quiz_pdf(path: Path, settings: Settings) -> dict:
+def extract_quiz_pages(path: Path, settings: Settings) -> tuple[list[str], bool]:
     if not 0 < path.stat().st_size <= QUIZ_MAX_BYTES:
         raise MediaError("Test uchun PDF 10 MB dan oshmasin.")
     pages, scanned, characters = [], 0, 0
     deadline = time.monotonic() + min(settings.job_timeout, 120)
     try:
         with fitz.open(path) as document:
+            if not document.is_pdf:
+                raise MediaError("PDF formatidagi faylni yuboring.")
             if document.needs_pass:
                 raise MediaError("Parolsiz PDF yuboring.")
             if not 1 <= len(document) <= QUIZ_MAX_PAGES:
@@ -363,8 +365,13 @@ def read_quiz_pdf(path: Path, settings: Settings) -> dict:
         raise
     except (fitz.FileDataError, RuntimeError, ValueError, pytesseract.TesseractError) as exc:
         raise MediaError("PDFni o'qib bo'lmadi. Matni tiniq va parolsiz fayl yuboring.") from exc
+    return pages, bool(scanned)
+
+
+def read_quiz_pdf(path: Path, settings: Settings) -> dict:
+    pages, scanned = extract_quiz_pages(path, settings)
     rows = [(line.strip(), False) for page in pages for line in page.splitlines() if line.strip()]
-    return {"questions": _parse_document_questions(rows, pdf=True), "scanned": bool(scanned)}
+    return {"questions": _parse_document_questions(rows, pdf=True), "scanned": scanned}
 
 
 def export_quiz(questions: list[dict], output: Path, kind: str) -> None:

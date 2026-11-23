@@ -37,7 +37,8 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
                 "max_input_mb": settings.max_input_bytes // MB,
                 "local_api": settings.local_mode,
                 "office_enabled": bool(settings.soffice),
-                "version": "0.5.3",
+                "gemini_configured": bool(settings.gemini_api_key),
+                "version": "0.5.4",
             },
             status=200 if ready or handoff else 503,
         )

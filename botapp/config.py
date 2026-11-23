@@ -74,6 +74,9 @@ class Settings:
     tesseract: str | None = None
     soffice: str | None = None
     ocr_languages: str = "uzb+uzb_cyrl+rus+eng"
+    gemini_api_key: str = field(default="", repr=False)
+    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_jobs_per_day: int = 10
 
     @classmethod
     def from_env(cls, require_token: bool = True) -> Settings:
@@ -116,11 +119,18 @@ class Settings:
             tesseract=executable("TESSERACT_PATH", "tesseract"),
             soffice=executable("SOFFICE_PATH", "soffice"),
             ocr_languages=os.getenv("OCR_LANGUAGES", "uzb+uzb_cyrl+rus+eng"),
+            gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip(),
+            gemini_jobs_per_day=positive_int("GEMINI_JOBS_PER_DAY", 10),
         )
         settings.validate(require_token)
         return settings
 
     def validate(self, require_token: bool = True) -> None:
+        if self.gemini_api_key and not re.fullmatch(
+            r"gemini-[A-Za-z0-9.-]{1,70}", self.gemini_model
+        ):
+            raise ValueError("GEMINI_MODEL noto'g'ri.")
         if not 0 <= self.owner_admin_id < 2**52:
             raise ValueError("OWNER_ADMIN_ID noto'g'ri.")
         if require_token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", self.token):

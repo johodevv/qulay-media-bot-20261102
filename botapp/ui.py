@@ -8,6 +8,7 @@ PDF_WORD = "📃 PDF → Word"
 STATUS = "⏳ Jarayon holati"
 CANCEL = "❌ Bekor qilish"
 QUIZ = "🧩 Word / PDFdan test"
+AI_QUIZ = "✨ Gemini bilan PDF testi"
 ADMIN = "🛡 Admin paneli"
 SERVICES = {
     "🎬 Video sifatini pasaytirish": "video",
@@ -19,8 +20,11 @@ SERVICES = {
 }
 
 
-def main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
-    rows = [[VIDEO], [PDF, WORD], [WORD_PDF, PDF_WORD], [QUIZ], [STATUS, CANCEL]]
+def main_keyboard(is_admin: bool = False, *, ai_enabled: bool = False) -> ReplyKeyboardMarkup:
+    rows = [[VIDEO], [PDF, WORD], [WORD_PDF, PDF_WORD], [QUIZ]]
+    if ai_enabled:
+        rows.append([AI_QUIZ])
+    rows.append([STATUS, CANCEL])
     if is_admin:
         rows.append([ADMIN])
     return ReplyKeyboardMarkup(
