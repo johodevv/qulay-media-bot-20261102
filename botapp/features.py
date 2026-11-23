@@ -19,15 +19,17 @@ from telegram import Update
 from telegram.error import BadRequest, TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, TypeHandler
 
-from botapp.gemini_quiz import AI_MAX_QUESTIONS, generate_pdf_quiz
+from botapp.gemini_quiz import AI_MAX_QUESTIONS, generate_document_quiz, sample_text_sections
 from botapp.media import MediaError
 from botapp.quiz import (
     LABELS,
     QUIZ_MAX_BYTES,
     export_quiz,
+    extract_quiz_docx_rows,
     extract_quiz_pages,
     read_quiz_docx,
     read_quiz_pdf,
+    read_quiz_text,
 )
 from botapp.quiz_choices import make_variant_questions
 from botapp.store import BotStore
@@ -35,7 +37,8 @@ from botapp.ui import ADMIN, AI_QUIZ, CANCEL, QUIZ, SERVICES, STATUS
 
 logger = logging.getLogger(__name__)
 TASHKENT = timezone(timedelta(hours=5))
-QUIZ_UPLOADS = {"parse", "parse-word", "parse-ai"}
+AI_UPLOADS = {"parse-ai": "pdf", "parse-ai-word": "docx", "parse-ai-text": "txt"}
+QUIZ_UPLOADS = {"parse", "parse-word", *AI_UPLOADS}
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -259,11 +262,13 @@ class FeatureHandlers:
         self.pending.pop(user_id, None)
         if ai:
             await update.effective_message.reply_text(
-                f"✨ PDF yuboring. Gemini {AI_MAX_QUESTIONS} tagacha A/B/C/D test savolini tuzadi "
-                "va javoblarni PDF matni bilan qayta solishtiradi.\n\n"
-                "Shu rejimda PDFdan o'qilgan matn Google Gemini'ga yuboriladi. "
+                "✨ Word (.docx), PDF yoki TXT yuboring. "
+                f"Gemini {AI_MAX_QUESTIONS} tagacha A/B/C/D test savolini tuzadi "
+                "va javoblarni manba matni bilan qayta solishtiradi.\n\n"
+                "Shu rejimda fayldan o'qilgan matn Google Gemini'ga yuboriladi. "
                 "Maxfiy va shaxsiy ma'lumotli fayl yubormang.\n\n"
-                "Limit: 10 MB, 60 ming belgi, 30 matnli yoki 5 skanerlangan sahifa.",
+                "Limit: fayl 10 MB. PDF 30 matnli yoki 5 skanerlangan sahifagacha. "
+                "Uzun Word va TXT fayllarining turli qismlaridan matn olinadi.",
                 reply_markup=self.parent.keyboard(user_id),
             )
             return
@@ -287,7 +292,7 @@ class FeatureHandlers:
         if text in {QUIZ, "🧩 PDFdan test"}:
             await self.select_quiz(update)
             return True
-        if text == AI_QUIZ:
+        if text in {AI_QUIZ, "✨ Gemini bilan PDF testi"}:
             await self.select_quiz(update, ai=True)
             return True
         if text in {CANCEL, STATUS} or text in SERVICES:
@@ -319,18 +324,20 @@ class FeatureHandlers:
         document = getattr(message, "document", None)
         filename = (document.file_name or "") if document else ""
         mime_type = document.mime_type if document else None
-        if filename.lower().endswith(".docx") or mime_type == DOCX_MIME:
-            action = "parse-word"
+        ai = session.mode == "quiz-ai"
+        if ai and (filename.lower().endswith(".txt") or mime_type == "text/plain"):
+            action = "parse-ai-text"
+        elif filename.lower().endswith(".docx") or mime_type == DOCX_MIME:
+            action = "parse-ai-word" if ai else "parse-word"
         elif filename.lower().endswith(".pdf") or mime_type == "application/pdf":
-            action = "parse"
+            action = "parse-ai" if ai else "parse"
         else:
-            await message.reply_text("Test uchun Word (.docx) yoki PDF faylini yuboring.")
+            await message.reply_text(
+                "Gemini testi uchun Word (.docx), PDF yoki TXT yuboring."
+                if ai
+                else "Test uchun Word (.docx) yoki PDF faylini yuboring."
+            )
             return True
-        if session.mode == "quiz-ai":
-            if action != "parse":
-                await message.reply_text("Gemini testi uchun PDF yuboring.")
-                return True
-            action = "parse-ai"
         if not document.file_size or not 0 < document.file_size <= QUIZ_MAX_BYTES:
             await message.reply_text("Har bir test fayli 10 MB dan oshmasin.")
             return True
@@ -341,7 +348,7 @@ class FeatureHandlers:
     async def launch(self, update, context, action, value, filename=""):
         user_id, chat_id = update.effective_user.id, update.effective_chat.id
         queue = self.uploads.get(user_id)
-        if action == "parse-ai" and user_id in self.parent.service.busy:
+        if action in AI_UPLOADS and user_id in self.parent.service.busy:
             await update.effective_message.reply_text("Avvalgi topshiriq tugashini kuting.")
             return
         if (
@@ -373,7 +380,7 @@ class FeatureHandlers:
         task = asyncio.create_task(
             self.run_jobs(context.bot, user_id, chat_id, status, action, value, filename)
         )
-        if action == "parse-ai":
+        if action in AI_UPLOADS:
             self.parent.service.sessions.pop(user_id, None)
         self.tasks[user_id] = task
         task.add_done_callback(lambda done: self._release(user_id, done))
@@ -405,7 +412,7 @@ class FeatureHandlers:
 
     async def work(self, bot, user_id, chat_id, status, action, value, filename):
         try:
-            async with self.ai_lock if action == "parse-ai" else self.work_lock:
+            async with self.ai_lock if action in AI_UPLOADS else self.work_lock:
                 with tempfile.TemporaryDirectory(prefix="qb-quiz-") as folder:
                     root = Path(folder)
                     if action == "restore":
@@ -416,10 +423,14 @@ class FeatureHandlers:
                         )
                         await status.edit_text(f"✅ Zaxira tiklandi: {count} foydalanuvchi.")
                     elif action in QUIZ_UPLOADS:
-                        path = root / ("input.docx" if action == "parse-word" else "input.pdf")
+                        kind = AI_UPLOADS.get(action, "docx" if action == "parse-word" else "pdf")
+                        path = root / f"input.{kind}"
                         await self.download(bot, value, path)
-                        if action == "parse-ai":
-                            questions, scanned = await self.ai_questions(user_id, path, status)
+                        sampled = False
+                        if action in AI_UPLOADS:
+                            questions, scanned, sampled = await self.ai_questions(
+                                user_id, path, kind, status
+                            )
                         else:
                             result = (
                                 await self.thread(read_quiz_docx, path)
@@ -443,8 +454,10 @@ class FeatureHandlers:
                             )
                         if questions[0].get("source_variant"):
                             note += "\nA/B/C/D variantlari manba matnidan tuzildi."
-                        if action == "parse-ai":
-                            note += "\n✨ Gemini javoblarni PDF matni bilan solishtirdi."
+                        if action in AI_UPLOADS:
+                            note += "\n✨ Gemini javoblarni manba matni bilan solishtirdi."
+                        if sampled:
+                            note += "\nSavollar uzun faylning turli qismlari asosida tuzildi."
                         first = questions[0]
                         preview = f"\n\nBirinchi savol: {first['question']}\n" + "\n".join(
                             f"{LABELS[i]}) {option}"
@@ -489,21 +502,31 @@ class FeatureHandlers:
                 status, "Test tayyorlanmadi. Fayl tuzilishini tekshirib qayta yuboring."
             )
 
-    async def ai_questions(self, user_id, path, status):
+    async def ai_questions(self, user_id, path, kind, status):
         settings = self.parent.settings
-        pages, scanned = await self.thread(extract_quiz_pages, path, settings)
+        sampled = scanned = False
+        if kind == "pdf":
+            pages, scanned = await self.thread(extract_quiz_pages, path, settings)
+        else:
+            if kind == "docx":
+                rows = await self.thread(extract_quiz_docx_rows, path)
+                text = "\n".join(content for content, _ in rows)
+            else:
+                text = await self.thread(read_quiz_text, path)
+            pages, sampled = await self.thread(sample_text_sections, text)
         await self._status(status, "⏳ Gemini savollarni tuzmoqda…")
 
         async def show_review():
-            await self._status(status, "⏳ Gemini javoblarni PDF bilan solishtiryapti…")
+            await self._status(status, "⏳ Gemini javoblarni manba bilan solishtiryapti…")
 
-        questions = await generate_pdf_quiz(
+        questions = await generate_document_quiz(
             pages,
             settings,
             lambda: self.store.reserve_gemini_job(user_id, settings.gemini_jobs_per_day),
             show_review,
+            source_kind=kind,
         )
-        return questions, scanned
+        return questions, scanned, sampled
 
     async def download(self, bot, file_id, output):
         remote = await bot.get_file(file_id, read_timeout=90)

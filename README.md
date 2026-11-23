@@ -101,13 +101,14 @@ manbadan olingan gapdagi bo'sh joy to'ldiriladi. Asl javob Telegramda tanlovdan
 keyin yuklab olinadi. «Word test» va «PDF test» varaqalarida javob variantlari
 va oxirida alohida javob kaliti bor.
 
-Ixtiyoriy **Gemini bilan PDF testi** uchun hostingda `GEMINI_API_KEY` ni sozlang.
-`/aiquiz` orqali oddiy o'quv matni yoki savol-javobli PDFdan 12 tagacha
-variantli savol tayyorlash mumkin. Bot PDFdan matn oladi, Gemini'dan savol tuzish
+Ixtiyoriy **Gemini bilan test** uchun hostingda `GEMINI_API_KEY` ni sozlang.
+`/aiquiz` orqali Word (.docx), PDF yoki TXT faylidan 12 tagacha variantli savol
+tayyorlash mumkin. Bot fayldan matn oladi, Gemini'dan savol tuzish
 va javob kalitini qayta tekshirishni so'raydi. Manbada topilmagan iqtibos yoki zid
-tekshiruvli savol chiqarilmaydi. Matn limiti 60 ming belgi. Natijani Telegramda
+tekshiruvli savol chiqarilmaydi. Matn limiti 60 ming belgi. Uzun Word/TXT
+faylining turli joylaridan parchalar tanlanadi. Natijani Telegramda
 ishlash, Word yoki PDFga olish mumkin. Kalit bo'lmasa oddiy testdan foydalaniladi.
-AI rejimidagi PDF matni Google'ga yuboriladi. Maxfiy hujjatlarni yubormang.
+AI rejimidagi fayl matni Google'ga yuboriladi. Maxfiy hujjatlarni yubormang.
 Standart model `gemini-3.1-flash-lite`. Bot odatda 24 soatda 10 AI topshirig'ini
 qabul qiladi. Vaqtinchalik server xatosida har bosqich bir marta qayta sinanadi.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida

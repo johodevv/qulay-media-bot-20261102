@@ -168,7 +168,7 @@ class Handlers:
         if self.features and user_id in self.features.tasks:
             text = "⏳ Test topshirig'i bajarilmoqda yoki navbatda. Natija shu chatga yuboriladi."
         elif (session := self.service.sessions.get(user_id)) and session.mode == "quiz-ai":
-            text = "✨ Gemini testi uchun PDF yuboring."
+            text = "✨ Gemini testi uchun Word (.docx), PDF yoki TXT yuboring."
         elif session and session.mode == "quiz":
             text = "🧩 Savol-javobli Word (.docx) yoki PDF yuboring."
         else:
@@ -199,7 +199,7 @@ class Handlers:
                 "Test savollari va natijasi 24 soat amal qiladi; eskirgan ma'lumotlar "
                 "keyingi murojaatda o'chiriladi. "
                 "Foydalanuvchilar ro'yxati zaxirasi faqat bosh adminga beriladi.\n\n"
-                "Gemini bilan test rejimida PDFdan o'qilgan matn Google'ga yuboriladi. "
+                "Gemini bilan test rejimida fayldan o'qilgan matn Google'ga yuboriladi. "
                 "Shu rejimga maxfiy va shaxsiy ma'lumotli fayl yubormang."
             )
 

@@ -68,7 +68,7 @@ async def serve(settings: Settings) -> None:
                 BotCommand("privacy", "Fayllar qanday saqlanadi"),
             ]
             if settings.gemini_api_key:
-                commands.append(BotCommand("aiquiz", "Gemini bilan PDFdan test"))
+                commands.append(BotCommand("aiquiz", "Gemini bilan Word, PDF yoki TXTdan test"))
             await application.bot.set_my_commands(commands)
             await service.start(application.bot)
             await application.start()

@@ -50,7 +50,7 @@ _KEY_HEADING = re.compile(
 )
 
 
-def read_quiz_docx(path: Path) -> dict:
+def extract_quiz_docx_rows(path: Path) -> list[tuple[str, bool]]:
     if not 0 < path.stat().st_size <= QUIZ_MAX_BYTES:
         raise MediaError("Test fayli 10 MB dan oshmasin.")
     validate_office(path, "docx")
@@ -73,7 +73,30 @@ def read_quiz_docx(path: Path) -> dict:
             )
             rows.append((text, highlighted))
 
-    return {"questions": _parse_document_questions(rows), "scanned": False}
+    return rows
+
+
+def read_quiz_docx(path: Path) -> dict:
+    return {"questions": _parse_document_questions(extract_quiz_docx_rows(path)), "scanned": False}
+
+
+def read_quiz_text(path: Path) -> str:
+    if not 0 < path.stat().st_size <= QUIZ_MAX_BYTES:
+        raise MediaError("Test fayli 10 MB dan oshmasin.")
+    data = path.read_bytes()
+    try:
+        if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+            text = data.decode("utf-16")
+        else:
+            try:
+                text = data.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = data.decode("cp1251")
+    except UnicodeDecodeError as exc:
+        raise MediaError("TXT faylini UTF-8 formatida saqlab, qayta yuboring.") from exc
+    if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", text):
+        raise MediaError("Oddiy matnli TXT faylini yuboring.")
+    return text
 
 
 def _parse_document_questions(rows: list[tuple[str, bool]], *, pdf: bool = False) -> list[dict]:
