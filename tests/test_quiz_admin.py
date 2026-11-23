@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock
 import fitz
 import pytest
 from docx import Document
+from docx.enum.text import WD_COLOR_INDEX
 from telegram import User
 from telegram.ext import Application
 
 from botapp.handlers import Handlers
 from botapp.media import MediaError
-from botapp.quiz import export_quiz, parse_questions, read_quiz_pdf
+from botapp.quiz import export_quiz, parse_questions, read_quiz_docx, read_quiz_pdf
 from botapp.service import ConversionService
 from botapp.store import BotStore
 from botapp.ui import ADMIN, QUIZ
@@ -243,3 +244,99 @@ async def test_cancel_quiz_releases_busy_and_preserves_files_until_thread_finish
     handlers.features.cancel(22)
     await asyncio.gather(task, return_exceptions=True)
     assert 22 not in handlers.service.busy and not handlers.features.tasks
+
+
+def test_word_quiz_preserves_numbered_answer_paragraphs_and_references(tmp_path):
+    source = tmp_path / "sorov.docx"
+    doc = Document()
+    doc.add_paragraph("ЖАВОБЛАР")
+    first = doc.add_paragraph().add_run("1. Биринчи савол?")
+    first.font.highlight_color = WD_COLOR_INDEX.YELLOW
+    doc.add_paragraph("Ж: Биринчи жавоб.")
+    doc.add_paragraph("2. Жавоб ичидаги рўйхат.")
+    doc.add_paragraph("Иккинчи хатбоши.")
+    doc.add_paragraph("2. Иккинчи савол?")
+    doc.add_paragraph("Ж: 1-савол билан бир хил.")
+    doc.add_paragraph("2. Учинчи савол?")
+    doc.add_paragraph("Жавоб: " + "Узун жавоб. " * 650)
+    doc.save(source)
+
+    questions = read_quiz_docx(source)["questions"]
+    assert len(questions) == 3
+    assert questions[0]["model_answer"].endswith("рўйхат.\nИккинчи хатбоши.")
+    assert questions[1]["model_answer"].endswith(questions[0]["model_answer"])
+    assert len(questions[2]["model_answer"]) > 7000
+    for kind, suffix in (("word", "docx"), ("pdf", "pdf")):
+        output = tmp_path / f"test.{suffix}"
+        export_quiz(questions, output, kind)
+        if kind == "word":
+            text = "\n".join(p.text for p in Document(output).paragraphs)
+        else:
+            with fitz.open(output) as pdf:
+                text = "\n".join(page.get_text() for page in pdf)
+        sheet, key = text.split("Javoblar kaliti", 1)
+        assert "Иккинчи савол?" in sheet and "Биринчи жавоб." not in sheet
+        assert "Иккинчи хатбоши." in key
+        assert key.count("Узун жавоб.") == 650
+
+
+async def test_word_batch_and_open_answer_flow(tmp_path, settings, monkeypatch):
+    store = make_store(tmp_path)
+    service = ConversionService(settings)
+    handlers = Handlers(service, settings, True, store)
+    source = tmp_path / "questions.docx"
+    doc = Document()
+    doc.add_paragraph("1. Савол?")
+    answer = "Жавоб матни. " * 500
+    doc.add_paragraph("Ж: " + answer)
+    doc.save(source)
+    release = asyncio.Event()
+
+    async def download(bot, file_id, output):
+        await release.wait()
+        output.write_bytes(source.read_bytes())
+
+    monkeypatch.setattr(handlers.features, "download", download)
+    statuses = [SimpleNamespace(edit_text=AsyncMock()) for _ in range(4)]
+    context = SimpleNamespace(
+        bot=SimpleNamespace(send_message=AsyncMock(side_effect=statuses), send_document=AsyncMock())
+    )
+    await handlers.receive(update_for(22, "🧩 PDFdan test"), context)
+    for num in range(4):
+        document = SimpleNamespace(
+            mime_type="application/octet-stream",
+            file_name=f"{num}.docx",
+            file_size=source.stat().st_size,
+            file_id=str(num),
+        )
+        await handlers.receive(update_for(22, document=document), context)
+    release.set()
+    await asyncio.gather(*handlers.features.tasks.values())
+    ids = set()
+    for num, status in enumerate(statuses):
+        assert f"{num}.docx" in status.edit_text.call_args.args[0]
+        markup = status.edit_text.call_args.kwargs["reply_markup"]
+        ids.add(markup.inline_keyboard[0][0].callback_data.split(":")[-1])
+    assert len(ids) == 4
+    quiz_id = ids.pop()
+    query = SimpleNamespace(
+        data=f"quiz:start:{quiz_id}", answer=AsyncMock(), edit_message_text=AsyncMock()
+    )
+    update = update_for(22, callback=query)
+    await handlers.features.quiz_callback(update, context)
+    assert "Жавоб матни" not in query.edit_message_text.call_args.args[0]
+    with pytest.raises(MediaError):
+        store.answer(22, quiz_id, 0, 1)
+    query.data = f"quiz:reveal:{quiz_id}:0"
+    await handlers.features.quiz_callback(update, context)
+    assert "Жавоб матни" in query.edit_message_text.call_args.args[0]
+    assert len(query.edit_message_text.call_args.args[0]) < 4096
+    query.data = f"quiz:full:{quiz_id}:0"
+    await handlers.features.quiz_callback(update, context)
+    assert (
+        context.bot.send_document.call_args.kwargs["document"].getvalue().decode() == answer.strip()
+    )
+    query.data = f"quiz:answer:{quiz_id}:0:1"
+    await handlers.features.quiz_callback(update, context)
+    assert "1 / 1" in query.edit_message_text.call_args.args[0]
+    assert store.attempt(22, quiz_id)["phase"] == "done"

@@ -84,7 +84,7 @@ OCR natijasidagi ism, sana, raqamlarni tekshiring; murakkab sahifa aynan tiklanm
 Loglarda faylni olish, aylantirish va yuborish vaqtlari alohida o'lchanadi;
 matn, fayl nomi va foydalanuvchi identifikatorlari bu o'lchovlarga yozilmaydi.
 
-## Admin paneli va PDFdan test
+## Admin paneli va Word/PDFdan test
 
 `OWNER_ADMIN_ID` ga bosh admin Telegram ID raqamini yozing. `/id` raqamni ko'rsatadi.
 `/admin` yoki «Admin paneli» tugmasida jami foydalanuvchilar, bugungi / 7 / 30 kunlik
@@ -93,7 +93,11 @@ tushgandan boshlanadi; eski chatlar Telegram orqali orqaga yig'ilmaydi.
 Faqat bosh admin `/addadmin ID` va `/removeadmin ID` bilan huquq beradi / oladi;
 yangi admin avval botga `/start` yuborishi kerak. Oddiy admin faqat panelni ko'radi.
 
-«PDFdan test» yoki `/quiz`: savollar va aniq javoblari yozilgan PDFni yuboring.
+«Word / PDFdan test» yoki `/quiz` tugmasidan savol-javobli Word (.docx) yoki PDF
+yuboring. Ketma-ket yuborilgan fayllar navbatdan o'tib, har biri alohida test bo'ladi.
+Raqamlangan Word savolidan keyingi xatboshi «Javob:» yoki «Ж:» bilan boshlansa,
+uzun javob matni saqlanadi. Telegramda javobni ochib, o'zingizni baholaysiz.
+Word/PDF varaqasida ochiq savollar va to'liq javoblar alohida bo'limlarda.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
 `Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
 kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.

@@ -1,4 +1,4 @@
-"""Admin console and private, answer-by-answer quizzes from an uploaded PDF."""
+"""Admin console and private quizzes from uploaded documents."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import logging
 import shutil
 import tempfile
 import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,12 +20,14 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, TypeHandler
 
 from botapp.media import MediaError
-from botapp.quiz import LABELS, QUIZ_MAX_BYTES, export_quiz, read_quiz_pdf
+from botapp.quiz import LABELS, QUIZ_MAX_BYTES, export_quiz, read_quiz_docx, read_quiz_pdf
 from botapp.store import BotStore
 from botapp.ui import ADMIN, CANCEL, QUIZ, SERVICES, STATUS
 
 logger = logging.getLogger(__name__)
 TASHKENT = timezone(timedelta(hours=5))
+QUIZ_UPLOADS = {"parse", "parse-word"}
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def date_text(timestamp: float) -> str:
@@ -36,6 +39,7 @@ class FeatureHandlers:
         self.parent, self.store = parent, store
         self.pending: dict[int, tuple[str, float]] = {}
         self.tasks: dict[int, asyncio.Task] = {}
+        self.uploads: dict[int, deque] = {}
         self.work_lock = asyncio.Semaphore(1)
 
     def register(self, application):
@@ -234,12 +238,13 @@ class FeatureHandlers:
             return
         self.pending.pop(user_id, None)
         await update.effective_message.reply_text(
-            "🧩 Savol-javobli PDFni yuboring. Keyin Telegram'da test ishlash "
-            "yoki Word/PDF olishni tanlaysiz.\n\n"
-            "Namuna:\n1. O'zbekiston poytaxti?\nA) Toshkent\nB) Samarqand\nJavob: A\n\n"
-            "Oddiy «Savol: ... / Javob: ...» juftlari ham qabul qilinadi. "
-            "Javoblar oxirida «Javoblar: 1-A, 2-B» shaklida ham bo'lishi mumkin.\n"
-            "Limit: 10 MB, 30 matnli sahifa yoki 5 skanerlangan sahifa, 100 savol.",
+            "🧩 Savol-javobli Word (.docx) yoki PDF yuboring. "
+            "Har bir fayldan alohida test tayyorlanadi.\n\n"
+            "A/B variantli testda bot ballni hisoblaydi. Uzun javobli Word faylida "
+            "javobni ochib, o'zingizni baholaysiz.\n\n"
+            "Word namuna: raqamlangan savol, keyingi qatorda «Javob:» yoki «Ж:».\n"
+            "Limit: har faylga 10 MB va 100 savol. "
+            "PDF: 30 matnli yoki 5 skanerlangan sahifa.",
             reply_markup=self.parent.keyboard(user_id),
         )
 
@@ -249,7 +254,7 @@ class FeatureHandlers:
         if text == ADMIN:
             await self.admin_command(update, context)
             return True
-        if text == QUIZ:
+        if text in {QUIZ, "🧩 PDFdan test"}:
             await self.select_quiz(update)
             return True
         if text in {CANCEL, STATUS} or text in SERVICES:
@@ -278,20 +283,37 @@ class FeatureHandlers:
         if not session or session.mode != "quiz":
             return False
         document = getattr(message, "document", None)
-        if not document or not (
-            document.mime_type == "application/pdf"
-            or (document.file_name or "").lower().endswith(".pdf")
-        ):
-            await message.reply_text("Test uchun savol va javoblar yozilgan PDF faylini yuboring.")
+        filename = (document.file_name or "") if document else ""
+        mime_type = document.mime_type if document else None
+        if filename.lower().endswith(".docx") or mime_type == DOCX_MIME:
+            action = "parse-word"
+        elif filename.lower().endswith(".pdf") or mime_type == "application/pdf":
+            action = "parse"
+        else:
+            await message.reply_text("Test uchun Word (.docx) yoki PDF faylini yuboring.")
             return True
         if not document.file_size or not 0 < document.file_size <= QUIZ_MAX_BYTES:
-            await message.reply_text("Test PDFi 10 MB dan oshmasin.")
+            await message.reply_text("Har bir test fayli 10 MB dan oshmasin.")
             return True
-        await self.launch(update, context, "parse", document.file_id)
+        session.touched = time.monotonic()
+        await self.launch(update, context, action, document.file_id, filename)
         return True
 
-    async def launch(self, update, context, action, value):
+    async def launch(self, update, context, action, value, filename=""):
         user_id, chat_id = update.effective_user.id, update.effective_chat.id
+        queue = self.uploads.get(user_id)
+        if (
+            queue is not None
+            and action in QUIZ_UPLOADS
+            and user_id not in self.parent.service.cancelled
+        ):
+            if len(queue) >= 4:
+                await update.effective_message.reply_text(
+                    "Navbat to'ldi. Biroz kutib, qayta yuboring."
+                )
+                return
+            queue.append((action, value, filename))
+            return
         if user_id in self.parent.service.busy:
             await context.bot.send_message(
                 chat_id, "Avvalgi topshiriq tugashini kuting yoki /cancel bosing."
@@ -302,12 +324,13 @@ class FeatureHandlers:
                 chat_id, "Test tayyorlash navbati to'ldi. Birozdan so'ng urinib ko'ring."
             )
             return
-        status = await context.bot.send_message(
-            chat_id,
-            "⏳ PDF o'qilmoqda…" if action == "parse" else "⏳ Test varaqasi tayyorlanmoqda…",
-        )
+        status = await self.job_status(context.bot, chat_id, action, filename)
         self.parent.service.busy.add(user_id)
-        task = asyncio.create_task(self.work(context.bot, user_id, chat_id, status, action, value))
+        if action in QUIZ_UPLOADS:
+            self.uploads[user_id] = deque()
+        task = asyncio.create_task(
+            self.run_jobs(context.bot, user_id, chat_id, status, action, value, filename)
+        )
         self.tasks[user_id] = task
         task.add_done_callback(lambda done: self._release(user_id, done))
 
@@ -316,8 +339,27 @@ class FeatureHandlers:
             self.parent.service.busy.discard(user_id)
             self.parent.service.cancelled.discard(user_id)
             self.tasks.pop(user_id, None)
+            self.uploads.pop(user_id, None)
 
-    async def work(self, bot, user_id, chat_id, status, action, value):
+    @staticmethod
+    async def job_status(bot, chat_id, action, filename):
+        text = "⏳ Fayl o'qilmoqda…" if action in QUIZ_UPLOADS else "⏳ Hujjat tayyorlanmoqda…"
+        if filename:
+            text += "\n" + filename[:120]
+        return await bot.send_message(chat_id, text)
+
+    async def run_jobs(self, bot, user_id, chat_id, status, action, value, filename):
+        try:
+            await self.work(bot, user_id, chat_id, status, action, value, filename)
+            queue = self.uploads.get(user_id)
+            while queue:
+                action, value, filename = queue.popleft()
+                status = await self.job_status(bot, chat_id, action, filename)
+                await self.work(bot, user_id, chat_id, status, action, value, filename)
+        finally:
+            self._release(user_id, asyncio.current_task())
+
+    async def work(self, bot, user_id, chat_id, status, action, value, filename):
         try:
             async with self.work_lock:
                 with tempfile.TemporaryDirectory(prefix="qb-quiz-") as folder:
@@ -329,14 +371,16 @@ class FeatureHandlers:
                             user_id, await asyncio.to_thread(path.read_bytes)
                         )
                         await status.edit_text(f"✅ Zaxira tiklandi: {count} foydalanuvchi.")
-                    elif action == "parse":
-                        path = root / "input.pdf"
+                    elif action in QUIZ_UPLOADS:
+                        path = root / ("input.docx" if action == "parse-word" else "input.pdf")
                         await self.download(bot, value, path)
-                        result = await self.thread(read_quiz_pdf, path, self.parent.settings)
+                        if action == "parse-word":
+                            result = await self.thread(read_quiz_docx, path)
+                        else:
+                            result = await self.thread(read_quiz_pdf, path, self.parent.settings)
                         quiz_id = self.store.save_quiz(
                             user_id, result["questions"], result["scanned"]
                         )
-                        self.parent.service.sessions.pop(user_id, None)
                         questions = result["questions"]
                         note = (
                             "\nSkanerlangan matn tanildi. Harf va javoblarni tekshiring."
@@ -345,17 +389,22 @@ class FeatureHandlers:
                         )
                         if any(q.get("generated_options") for q in questions):
                             note += (
-                                "\nVariantlar PDFdagi boshqa javoblardan tuzildi. "
+                                "\nVariantlar fayldagi boshqa javoblardan tuzildi. "
                                 "Boshlashdan oldin Word/PDF nusxasini tekshiring."
                             )
+                        if "model_answer" in questions[0]:
+                            note += "\nJavobni ochib, o'zingizni baholaysiz."
                         first = questions[0]
                         preview = f"\n\nBirinchi savol: {first['question']}\n" + "\n".join(
-                            f"{LABELS[i]}) {option}" for i, option in enumerate(first["options"])
+                            f"{LABELS[i]}) {option}"
+                            for i, option in enumerate(first.get("options", []))
                         )
                         if len(preview) > 2500:
                             preview = preview[:2400] + "…\nTo'liq matn Word/PDF nusxasida."
                         await status.edit_text(
-                            f"✅ {len(questions)} ta savol va javob tayyor.{note}{preview}"
+                            f"✅ {len(questions)} ta savol va javob tayyor."
+                            + (f"\n{filename[:120]}" if filename else "")
+                            + f"{note}{preview}"
                             "\n\nKerakli usulni tanlang:",
                             reply_markup=self.quiz_menu(quiz_id),
                         )
@@ -386,15 +435,13 @@ class FeatureHandlers:
         except Exception as exc:
             logger.error("Test tayyorlash xatosi: %s", type(exc).__name__)
             await self._status(
-                status, "Test tayyorlanmadi. PDF tuzilishini tekshirib qayta yuboring."
+                status, "Test tayyorlanmadi. Fayl tuzilishini tekshirib qayta yuboring."
             )
-        finally:
-            self._release(user_id, asyncio.current_task())
 
     async def download(self, bot, file_id, output):
         remote = await bot.get_file(file_id, read_timeout=90)
         if remote.file_size and remote.file_size > QUIZ_MAX_BYTES:
-            raise MediaError("Test PDFi 10 MB dan oshmasin.")
+            raise MediaError("Fayl 10 MB dan oshmasin.")
         if self.parent.settings.local_mode:
             source = await asyncio.to_thread(Path(remote.file_path).resolve)
             if (
@@ -403,7 +450,7 @@ class FeatureHandlers:
             ):
                 raise MediaError("Ichki fayl manzili noto'g'ri.")
             if source.stat().st_size > QUIZ_MAX_BYTES:
-                raise MediaError("Test PDFi 10 MB dan oshmasin.")
+                raise MediaError("Fayl 10 MB dan oshmasin.")
             try:
                 await self.thread(shutil.copyfile, source, output)
             finally:
@@ -411,7 +458,7 @@ class FeatureHandlers:
         else:
             await remote.download_to_drive(output, read_timeout=90, write_timeout=90)
         if not 0 < output.stat().st_size <= QUIZ_MAX_BYTES:
-            raise MediaError("Test PDFi 10 MB dan oshmasin.")
+            raise MediaError("Fayl 10 MB dan oshmasin.")
 
     @staticmethod
     async def thread(function, *args):
@@ -446,12 +493,39 @@ class FeatureHandlers:
         attempt = self.store.attempt(user_id, quiz_id)
         count, position = len(quiz["questions"]), attempt["position"]
         if attempt["phase"] == "done":
+            score_label = (
+                "O'zingiz to'g'ri deb baholagan javoblar"
+                if "model_answer" in quiz["questions"][0]
+                else "To'g'ri javoblar"
+            )
             return (
-                f"🏁 Test tugadi!\n\nTo'g'ri javoblar: {attempt['score']} / {count}\n"
+                f"🏁 Test tugadi!\n\n{score_label}: {attempt['score']} / {count}\n"
                 f"Natija: {attempt['score'] / count * 100:.0f}%",
                 self.quiz_menu(quiz_id),
             )
         question = quiz["questions"][position]
+        if "model_answer" in question:
+            text = f"🧩 Savol {position + 1} / {count}\n\n{question['question']}"
+            if attempt["phase"] == "question":
+                button = Button(
+                    "Javobni ko'rish", callback_data=f"quiz:reveal:{quiz_id}:{position}"
+                )
+                return text, Markup([[button]])
+            answer = question["model_answer"]
+            available = 3650 - len(text)
+            buttons = []
+            if len(answer) > available:
+                answer = answer[:available].rstrip() + "…"
+                buttons.append(
+                    [Button("To'liq javob (.txt)", callback_data=f"quiz:full:{quiz_id}:{position}")]
+                )
+            buttons.append(
+                [
+                    Button("✅ Topdim", callback_data=f"quiz:answer:{quiz_id}:{position}:1"),
+                    Button("🔁 Takrorlayman", callback_data=f"quiz:answer:{quiz_id}:{position}:0"),
+                ]
+            )
+            return f"{text}\n\nJavob:\n{answer}\n\nO'zingizni baholang.", Markup(buttons)
         if attempt["phase"] == "feedback":
             chosen = json.loads(attempt["answers"])[-1]
             correct = question["correct"]
@@ -486,13 +560,28 @@ class FeatureHandlers:
         try:
             parts = query.data.split(":")
             action, quiz_id = parts[1:3]
-            self.store.quiz(user_id, quiz_id)  # Ownership check before any action.
+            quiz = self.store.quiz(user_id, quiz_id)  # Ownership check before any action.
             if action in {"word", "pdf"}:
                 await query.answer()
                 await self.launch(update, context, action, quiz_id)
                 return
             if action == "start" and len(parts) == 3:
                 self.store.start_attempt(user_id, quiz_id)
+            elif action == "reveal" and len(parts) == 4:
+                self.store.reveal_answer(user_id, quiz_id, int(parts[3]))
+            elif action == "full" and len(parts) == 4:
+                position = int(parts[3])
+                attempt = self.store.attempt(user_id, quiz_id)
+                if attempt["phase"] != "review" or attempt["position"] != position:
+                    raise MediaError("Bu tugma eskirgan.")
+                answer = quiz["questions"][position]["model_answer"]
+                await query.answer()
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id,
+                    document=io.BytesIO(answer.encode("utf-8")),
+                    filename=f"{position + 1}-savol-javobi.txt",
+                )
+                return
             elif action == "answer" and len(parts) == 5:
                 self.store.answer(user_id, quiz_id, int(parts[3]), int(parts[4]))
             elif action == "next" and len(parts) == 4:

@@ -264,7 +264,7 @@ class BotStore:
             (quiz_id, user_id, time.time()),
         ).fetchone()
         if row is None:
-            raise MediaError("Test eskirgan yoki sizga tegishli emas. PDFni qayta yuboring.")
+            raise MediaError("Test eskirgan yoki sizga tegishli emas. Faylni qayta yuboring.")
         return json.loads(row[0])
 
     def quiz(self, user_id: int, quiz_id: str) -> dict:
@@ -293,26 +293,56 @@ class BotStore:
             raise MediaError("Avval «Testni boshlash»ni bosing.")
         return dict(row)
 
+    def reveal_answer(self, user_id: int, quiz_id: str, position: int) -> None:
+        with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            quiz = self._quiz(db, user_id, quiz_id)
+            if not 0 <= position < len(quiz["questions"]):
+                raise MediaError("Savol topilmadi.")
+            if "model_answer" not in quiz["questions"][position]:
+                raise MediaError("Bu savolda javob variantini tanlang.")
+            row = db.execute(
+                "SELECT phase FROM attempts WHERE user_id=? AND quiz_id=? AND position=?",
+                (user_id, quiz_id, position),
+            ).fetchone()
+            if not row or row["phase"] not in {"question", "review"}:
+                raise MediaError("Bu tugma eskirgan.")
+            db.execute(
+                "UPDATE attempts SET phase='review' WHERE user_id=? AND quiz_id=? AND position=?",
+                (user_id, quiz_id, position),
+            )
+
     def answer(self, user_id: int, quiz_id: str, position: int, choice: int) -> dict:
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
             quiz = self._quiz(db, user_id, quiz_id)
+            if not 0 <= position < len(quiz["questions"]):
+                raise MediaError("Savol topilmadi.")
+            question = quiz["questions"][position]
+            open_answer = "model_answer" in question
             row = db.execute("SELECT * FROM attempts WHERE user_id=?", (user_id,)).fetchone()
             if (
                 not row
                 or row["quiz_id"] != quiz_id
                 or row["position"] != position
-                or row["phase"] != "question"
+                or row["phase"] != ("review" if open_answer else "question")
             ):
                 raise MediaError("Bu savolga javob berilgan yoki tugma eskirgan.")
-            question = quiz["questions"][position]
-            if not 0 <= choice < len(question["options"]):
-                raise MediaError("Javob varianti noto'g'ri.")
+            if open_answer:
+                if choice not in {0, 1}:
+                    raise MediaError("Bahoni tugmadan tanlang.")
+                correct = choice
+                next_position = position + 1
+                phase = "done" if next_position == len(quiz["questions"]) else "question"
+            else:
+                if not 0 <= choice < len(question["options"]):
+                    raise MediaError("Javob varianti noto'g'ri.")
+                correct = int(choice == question["correct"])
+                next_position, phase = position, "feedback"
             answers = json.loads(row["answers"]) + [choice]
-            score = row["score"] + int(choice == question["correct"])
             db.execute(
-                "UPDATE attempts SET answers=?, score=?, phase='feedback' WHERE user_id=?",
-                (json.dumps(answers), score, user_id),
+                "UPDATE attempts SET answers=?, score=?, position=?, phase=? WHERE user_id=?",
+                (json.dumps(answers), row["score"] + correct, next_position, phase, user_id),
             )
         return self.attempt(user_id, quiz_id)
 

@@ -8,12 +8,14 @@ import re
 import time
 from pathlib import Path
 from xml.sax.saxutils import escape
+from zipfile import ZipFile
 
 import fitz
 import pytesseract
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
+from lxml import etree
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
@@ -25,21 +27,88 @@ from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 from botapp.config import MB, Settings
 from botapp.document_layout import clean_paper, font_path, orient_document
 from botapp.media import MediaError, ocr_available
+from botapp.office import validate_office
 
 QUIZ_MAX_BYTES = 10 * MB
 QUIZ_MAX_PAGES = 30
 QUIZ_MAX_QUESTIONS = 100
 LABELS = "ABCDEF"
-_ANSWER = re.compile(
+_ANSWER_PREFIX = (
     r"^(?:(?:to['’`ʻ‘]?g['’`ʻ‘]?ri|correct|правильный)\s+)?"
-    r"(?:javob(?:i)?|answer|ответ)\s*[:：=\-]\s*(.+)$",
-    re.I,
+    r"(?:javob(?:i)?|answer|ответ|жавоб(?:и)?|ж)\s*[:：=\-–—]\s*"
+)
+_ANSWER = re.compile(_ANSWER_PREFIX + r"(.+)$", re.I)
+_OPEN_ANSWER = re.compile(_ANSWER_PREFIX, re.I)
+_ANSWER_REFERENCE = re.compile(
+    r"(\d{1,3})\s*[-–]?\s*савол(?:да ёритилган| билан бир хил)[.!]?", re.I
 )
 _QUESTION = re.compile(r"^\s*(\d{1,3})\s*[.)]\s*(.*)$")
 _OPTION = re.compile(r"(?<!\w)([*+]?)([A-FАВСДЕ])\s*[.)]\s*", re.I)
 _KEY_HEADING = re.compile(
     r"^\s*(?:javoblar(?:i)?|javoblar\s+kaliti|answers?|ответы|answer\s+key)\s*[:：]?\s*$", re.I
 )
+
+
+def read_quiz_docx(path: Path) -> dict:
+    if not 0 < path.stat().st_size <= QUIZ_MAX_BYTES:
+        raise MediaError("Test fayli 10 MB dan oshmasin.")
+    validate_office(path, "docx")
+    with ZipFile(path) as archive:
+        info = archive.getinfo("word/document.xml")
+        if info.file_size > 16 * MB:
+            raise MediaError("Word faylining tuzilishi juda katta.")
+        xml = etree.fromstring(
+            archive.read(info), etree.XMLParser(resolve_entities=False, no_network=True)
+        )
+
+    rows = []
+    for paragraph in xml.iter(qn("w:p")):
+        parts = []
+        for node in paragraph.iter(qn("w:t"), qn("w:tab"), qn("w:br"), qn("w:cr")):
+            parts.append((node.text or "") if node.tag == qn("w:t") else " ")
+        if text := "".join(parts).strip():
+            highlighted = any(
+                node.get(qn("w:val")) == "yellow" for node in paragraph.iter(qn("w:highlight"))
+            )
+            rows.append((text, highlighted))
+
+    starts = []
+    for index, (text, highlighted) in enumerate(rows):
+        number = _QUESTION.fullmatch(text)
+        next_is_answer = index + 1 < len(rows) and _OPEN_ANSWER.match(rows[index + 1][0])
+        if number and number[2] and (highlighted or next_is_answer):
+            starts.append((index, int(number[1]), _text(number[2])))
+
+    if not starts or not any(
+        index + 1 < len(rows) and _OPEN_ANSWER.match(rows[index + 1][0]) for index, _, _ in starts
+    ):
+        questions = parse_questions("\n".join(text for text, _ in rows))
+        return {"questions": questions, "scanned": False}
+
+    if len(starts) > QUIZ_MAX_QUESTIONS:
+        raise MediaError("Bitta faylda ko'pi bilan 100 savol bo'lsin.")
+    questions = []
+    answers_by_number = {}
+    for offset, (start, number, question) in enumerate(starts):
+        end = starts[offset + 1][0] if offset + 1 < len(starts) else len(rows)
+        if start + 1 >= end or not (marker := _OPEN_ANSWER.match(rows[start + 1][0])):
+            raise MediaError(f"{number}-savoldan keyin «Javob:» yoki «Ж:» yozing.")
+        parts = [rows[start + 1][0][marker.end() :].strip()]
+        parts.extend(text for text, _ in rows[start + 2 : end])
+        answer = "\n".join(part for part in parts if part)
+        if not answer or len(question) > 2200:
+            raise MediaError(f"{number}-savol matni yoki javobi to'liq emas.")
+        questions.append({"question": question, "model_answer": answer})
+        answers_by_number.setdefault(number, []).append(answer)
+
+    for question in questions:
+        answer = question["model_answer"]
+        reference = _ANSWER_REFERENCE.fullmatch(answer)
+        if reference:
+            matches = answers_by_number.get(int(reference[1]), [])
+            if len(matches) == 1 and not _ANSWER_REFERENCE.fullmatch(matches[0]):
+                question["model_answer"] = f"{answer}\n\n{matches[0]}"
+    return {"questions": questions, "scanned": False}
 
 
 def _text(value: str) -> str:
@@ -282,11 +351,21 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
             paragraph = doc.add_paragraph()
             paragraph.paragraph_format.keep_with_next = True
             paragraph.add_run(f"{index}. {question['question']}").bold = True
-            for label, option in zip(LABELS, question["options"], strict=False):
+            for label, option in zip(LABELS, question.get("options", []), strict=False):
                 doc.add_paragraph(f"{label}) {option}")
+            if "model_answer" in question:
+                doc.add_paragraph("Javob: ______________________________________________")
         doc.add_page_break()
         doc.add_heading("Javoblar kaliti", 1)
         for index, question in enumerate(questions, 1):
+            if "model_answer" in question:
+                prompt = doc.add_paragraph()
+                prompt.paragraph_format.keep_with_next = True
+                prompt.add_run(f"{index}. {question['question']}").bold = True
+                for line in question["model_answer"].splitlines():
+                    if line:
+                        doc.add_paragraph(line)
+                continue
             doc.add_paragraph(
                 f"{index}. {LABELS[question['correct']]} — "
                 f"{question['options'][question['correct']]}"
@@ -309,11 +388,21 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
     ]
     for index, question in enumerate(questions, 1):
         story.append(Paragraph(escape(f"{index}. {question['question']}"), question_style))
-        for label, option in zip(LABELS, question["options"], strict=False):
+        for label, option in zip(LABELS, question.get("options", []), strict=False):
             story.append(Paragraph(escape(f"{label}) {option}"), normal))
+        if "model_answer" in question:
+            story.append(Paragraph("Javob: ______________________________________________", normal))
         story.append(Spacer(1, 5))
     story += [PageBreak(), Paragraph("Javoblar kaliti", heading)]
     for index, question in enumerate(questions, 1):
+        if "model_answer" in question:
+            story.append(Paragraph(escape(f"{index}. {question['question']}"), question_style))
+            story.extend(
+                Paragraph(escape(line), normal)
+                for line in question["model_answer"].splitlines()
+                if line
+            )
+            continue
         story.append(
             Paragraph(
                 escape(

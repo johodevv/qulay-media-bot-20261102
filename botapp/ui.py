@@ -7,7 +7,7 @@ WORD_PDF = "📑 Word → PDF"
 PDF_WORD = "📃 PDF → Word"
 STATUS = "⏳ Jarayon holati"
 CANCEL = "❌ Bekor qilish"
-QUIZ = "🧩 PDFdan test"
+QUIZ = "🧩 Word / PDFdan test"
 ADMIN = "🛡 Admin paneli"
 SERVICES = {
     "🎬 Video sifatini pasaytirish": "video",

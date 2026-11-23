@@ -140,7 +140,7 @@ class Handlers:
             "📄 Rasm → PDF\n"
             "📝 Rasm → Word\n\n"
             "📑 Word → PDF yoki PDF → Word\n\n"
-            "🧩 Savol-javobli PDFdan Telegram testi va Word/PDF test varaqasi\n\n"
+            "🧩 Savol-javobli Word/PDFdan test\n\n"
             "Xizmatni tanlang → fayl yuboring → kerakli natijani belgilang.\n"
             "Bir hujjat uchun bir nechta rasm yuborishingiz mumkin.\n\n"
             f"Limit: jami {self.settings.max_input_bytes // MB} MB, "
@@ -165,7 +165,7 @@ class Handlers:
         if self.features and user_id in self.features.tasks:
             text = "⏳ Test topshirig'i bajarilmoqda yoki navbatda. Natija shu chatga yuboriladi."
         elif (session := self.service.sessions.get(user_id)) and session.mode == "quiz":
-            text = "🧩 Savol-javobli PDF faylini yuboring."
+            text = "🧩 Savol-javobli Word (.docx) yoki PDF yuboring."
         else:
             text = self.service.status_text(user_id)
         await update.effective_message.reply_text(text, reply_markup=self.keyboard(user_id))

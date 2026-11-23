@@ -62,7 +62,7 @@ async def serve(settings: Settings) -> None:
                     BotCommand("start", "Boshlash va yo'riqnoma"),
                     BotCommand("menu", "Xizmatlar menyusini ochish"),
                     BotCommand("status", "Topshiriq holati"),
-                    BotCommand("quiz", "PDFdan test tayyorlash"),
+                    BotCommand("quiz", "Word yoki PDFdan test tayyorlash"),
                     BotCommand("id", "Telegram ID raqamim"),
                     BotCommand("admin", "Admin paneli"),
                     BotCommand("cancel", "Tanlovni bekor qilish"),
