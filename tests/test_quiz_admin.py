@@ -280,15 +280,19 @@ def test_word_quiz_preserves_numbered_answer_paragraphs_and_references(tmp_path)
         assert key.count("Узун жавоб.") == 650
 
 
-async def test_word_batch_and_open_answer_flow(tmp_path, settings, monkeypatch):
+async def test_word_batch_creates_scored_multiple_choice_tests(tmp_path, settings, monkeypatch):
     store = make_store(tmp_path)
     service = ConversionService(settings)
     handlers = Handlers(service, settings, True, store)
     source = tmp_path / "questions.docx"
     doc = Document()
     doc.add_paragraph("1. Савол?")
-    answer = "Жавоб матни. " * 500
+    answer = (
+        "Машқни бажариш учун ўқувчилар керакли маълумотларни дафтарга ёзадилар. Жавоб матни. " * 100
+    )
     doc.add_paragraph("Ж: " + answer)
+    doc.add_paragraph("2. Кейинги савол?")
+    doc.add_paragraph("Ж: Гуруҳ аъзолари машғулот вақтида янги маълумотларни диққат билан ўқийди.")
     doc.save(source)
     release = asyncio.Event()
 
@@ -324,19 +328,30 @@ async def test_word_batch_and_open_answer_flow(tmp_path, settings, monkeypatch):
     )
     update = update_for(22, callback=query)
     await handlers.features.quiz_callback(update, context)
-    assert "Жавоб матни" not in query.edit_message_text.call_args.args[0]
-    with pytest.raises(MediaError):
-        store.answer(22, quiz_id, 0, 1)
-    query.data = f"quiz:reveal:{quiz_id}:0"
-    await handlers.features.quiz_callback(update, context)
-    assert "Жавоб матни" in query.edit_message_text.call_args.args[0]
+    assert "____" in query.edit_message_text.call_args.args[0]
+    keyboard = query.edit_message_text.call_args.kwargs["reply_markup"].inline_keyboard
+    assert [button.text for button in keyboard[0]] == list("ABCD")
     assert len(query.edit_message_text.call_args.args[0]) < 4096
+    questions = store.quiz(22, quiz_id)["questions"]
+    correct = questions[0]["correct"]
+    assert questions[0]["options"][correct] in answer
+    query.data = f"quiz:answer:{quiz_id}:0:{correct}"
+    await handlers.features.quiz_callback(update, context)
+    assert "✅ To'g'ri!" in query.edit_message_text.call_args.args[0]
+    with pytest.raises(MediaError):
+        store.answer(22, quiz_id, 0, correct)
     query.data = f"quiz:full:{quiz_id}:0"
     await handlers.features.quiz_callback(update, context)
     assert (
         context.bot.send_document.call_args.kwargs["document"].getvalue().decode() == answer.strip()
     )
-    query.data = f"quiz:answer:{quiz_id}:0:1"
+    query.data = f"quiz:next:{quiz_id}:0"
     await handlers.features.quiz_callback(update, context)
-    assert "1 / 1" in query.edit_message_text.call_args.args[0]
+    wrong = (questions[1]["correct"] + 1) % 4
+    query.data = f"quiz:answer:{quiz_id}:1:{wrong}"
+    await handlers.features.quiz_callback(update, context)
+    assert "Noto'g'ri" in query.edit_message_text.call_args.args[0]
+    query.data = f"quiz:next:{quiz_id}:1"
+    await handlers.features.quiz_callback(update, context)
+    assert "1 / 2" in query.edit_message_text.call_args.args[0]
     assert store.attempt(22, quiz_id)["phase"] == "done"

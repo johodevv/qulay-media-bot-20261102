@@ -370,6 +370,9 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
                 f"{index}. {LABELS[question['correct']]} — "
                 f"{question['options'][question['correct']]}"
             )
+            for line in question.get("source_answer", "").splitlines():
+                if line:
+                    doc.add_paragraph(line)
         doc.save(output)
         return
     if kind != "pdf":
@@ -387,7 +390,8 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
         Paragraph("Ism-familiya: _______________________    Sana: ______________", normal),
     ]
     for index, question in enumerate(questions, 1):
-        story.append(Paragraph(escape(f"{index}. {question['question']}"), question_style))
+        prompt = escape(f"{index}. {question['question']}").replace("\n", "<br/>")
+        story.append(Paragraph(prompt, question_style))
         for label, option in zip(LABELS, question.get("options", []), strict=False):
             story.append(Paragraph(escape(f"{label}) {option}"), normal))
         if "model_answer" in question:
@@ -411,6 +415,11 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
                 ),
                 normal,
             )
+        )
+        story.extend(
+            Paragraph(escape(line), normal)
+            for line in question.get("source_answer", "").splitlines()
+            if line
         )
     SimpleDocTemplate(
         str(output),

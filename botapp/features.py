@@ -21,6 +21,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, TypeHandler
 
 from botapp.media import MediaError
 from botapp.quiz import LABELS, QUIZ_MAX_BYTES, export_quiz, read_quiz_docx, read_quiz_pdf
+from botapp.quiz_choices import make_variant_questions
 from botapp.store import BotStore
 from botapp.ui import ADMIN, CANCEL, QUIZ, SERVICES, STATUS
 
@@ -240,8 +241,8 @@ class FeatureHandlers:
         await update.effective_message.reply_text(
             "🧩 Savol-javobli Word (.docx) yoki PDF yuboring. "
             "Har bir fayldan alohida test tayyorlanadi.\n\n"
-            "A/B variantli testda bot ballni hisoblaydi. Uzun javobli Word faylida "
-            "javobni ochib, o'zingizni baholaysiz.\n\n"
+            "Bot javob variantlarini ko'rsatadi, tanlovingizni tekshiradi "
+            "va yakunda ballni hisoblaydi.\n\n"
             "Word namuna: raqamlangan savol, keyingi qatorda «Javob:» yoki «Ж:».\n"
             "Limit: har faylga 10 MB va 100 savol. "
             "PDF: 30 matnli yoki 5 skanerlangan sahifa.",
@@ -378,10 +379,8 @@ class FeatureHandlers:
                             result = await self.thread(read_quiz_docx, path)
                         else:
                             result = await self.thread(read_quiz_pdf, path, self.parent.settings)
-                        quiz_id = self.store.save_quiz(
-                            user_id, result["questions"], result["scanned"]
-                        )
-                        questions = result["questions"]
+                        questions = await self.thread(make_variant_questions, result["questions"])
+                        quiz_id = self.store.save_quiz(user_id, questions, result["scanned"])
                         note = (
                             "\nSkanerlangan matn tanildi. Harf va javoblarni tekshiring."
                             if result["scanned"]
@@ -392,8 +391,8 @@ class FeatureHandlers:
                                 "\nVariantlar fayldagi boshqa javoblardan tuzildi. "
                                 "Boshlashdan oldin Word/PDF nusxasini tekshiring."
                             )
-                        if "model_answer" in questions[0]:
-                            note += "\nJavobni ochib, o'zingizni baholaysiz."
+                        if questions[0].get("source_variant"):
+                            note += "\nA/B/C/D variantlari manba matnidan tuzildi."
                         first = questions[0]
                         preview = f"\n\nBirinchi savol: {first['question']}\n" + "\n".join(
                             f"{LABELS[i]}) {option}"
@@ -402,10 +401,10 @@ class FeatureHandlers:
                         if len(preview) > 2500:
                             preview = preview[:2400] + "…\nTo'liq matn Word/PDF nusxasida."
                         await status.edit_text(
-                            f"✅ {len(questions)} ta savol va javob tayyor."
+                            f"✅ {len(questions)} ta test savoli tayyor."
                             + (f"\n{filename[:120]}" if filename else "")
                             + f"{note}{preview}"
-                            "\n\nKerakli usulni tanlang:",
+                            "\n\nTestni boshlang yoki varaqani yuklab oling.",
                             reply_markup=self.quiz_menu(quiz_id),
                         )
                     else:
@@ -480,7 +479,7 @@ class FeatureHandlers:
     def quiz_menu(quiz_id):
         return Markup(
             [
-                [Button("▶️ Telegram'da testni boshlash", callback_data=f"quiz:start:{quiz_id}")],
+                [Button("▶️ Testni boshlash", callback_data=f"quiz:start:{quiz_id}")],
                 [
                     Button("📝 Word olish", callback_data=f"quiz:word:{quiz_id}"),
                     Button("📄 PDF olish", callback_data=f"quiz:pdf:{quiz_id}"),
@@ -534,16 +533,19 @@ class FeatureHandlers:
                 f"\nTo'g'ri javob: {LABELS[correct]}) {question['options'][correct]}"
                 f"\nBall: {attempt['score']} / {count}"
             )
-            return text, Markup(
+            buttons = [
                 [
-                    [
-                        Button(
-                            "🏁 Natijani ko'rish" if position + 1 == count else "Keyingi savol ➡️",
-                            callback_data=f"quiz:next:{quiz_id}:{position}",
-                        )
-                    ]
+                    Button(
+                        "🏁 Natijani ko'rish" if position + 1 == count else "Keyingi savol ➡️",
+                        callback_data=f"quiz:next:{quiz_id}:{position}",
+                    )
                 ]
-            )
+            ]
+            if "source_answer" in question:
+                buttons.append(
+                    [Button("Asl javob (.txt)", callback_data=f"quiz:full:{quiz_id}:{position}")]
+                )
+            return text, Markup(buttons)
         text = f"🧩 Savol {position + 1} / {count}\n\n{question['question']}\n\n" + "\n\n".join(
             f"{LABELS[i]}) {option}" for i, option in enumerate(question["options"])
         )
@@ -572,9 +574,15 @@ class FeatureHandlers:
             elif action == "full" and len(parts) == 4:
                 position = int(parts[3])
                 attempt = self.store.attempt(user_id, quiz_id)
-                if attempt["phase"] != "review" or attempt["position"] != position:
+                if (
+                    attempt["phase"] not in {"review", "feedback"}
+                    or attempt["position"] != position
+                ):
                     raise MediaError("Bu tugma eskirgan.")
-                answer = quiz["questions"][position]["model_answer"]
+                question = quiz["questions"][position]
+                answer = question.get("source_answer") or question.get("model_answer")
+                if not answer:
+                    raise MediaError("Asl javob fayli mavjud emas.")
                 await query.answer()
                 await context.bot.send_document(
                     chat_id=update.effective_chat.id,
