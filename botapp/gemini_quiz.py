@@ -97,33 +97,43 @@ async def _generate_json(
 ) -> dict:
     try:
         async with asyncio.timeout(42):
-            async with client.stream(
-                "POST",
-                f"{AI_ENDPOINT}/{settings.gemini_model}:generateContent",
-                headers={"x-goog-api-key": settings.gemini_api_key},
-                json={
-                    "systemInstruction": {"parts": [{"text": instruction}]},
-                    "contents": [{"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}],
-                    "generationConfig": {
-                        "responseMimeType": "application/json",
-                        "responseJsonSchema": schema,
-                        "maxOutputTokens": 8000,
+            for attempt in range(2):
+                if attempt:
+                    await asyncio.sleep(1)
+                async with client.stream(
+                    "POST",
+                    f"{AI_ENDPOINT}/{settings.gemini_model}:generateContent",
+                    headers={"x-goog-api-key": settings.gemini_api_key},
+                    json={
+                        "systemInstruction": {"parts": [{"text": instruction}]},
+                        "contents": [
+                            {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}
+                        ],
+                        "generationConfig": {
+                            "responseMimeType": "application/json",
+                            "responseJsonSchema": schema,
+                            "maxOutputTokens": 8000,
+                        },
                     },
-                },
-            ) as response:
-                if response.status_code == 429:
-                    raise MediaError(
-                        "Gemini limiti vaqtincha to'ldi. Birozdan keyin urinib ko'ring."
-                    )
-                if response.status_code in {401, 403}:
-                    raise MediaError("Gemini ulanishini bot administratori tekshirishi kerak.")
-                if response.is_error or response.is_redirect:
-                    raise MediaError("Gemini vaqtincha javob bera olmadi. Keyinroq urinib ko'ring.")
-                raw = bytearray()
-                async for chunk in response.aiter_bytes():
-                    raw.extend(chunk)
-                    if len(raw) > 262144:
-                        raise MediaError("Gemini javobi juda katta. Kichikroq PDF yuboring.")
+                ) as response:
+                    if not attempt and response.status_code in {500, 502, 503, 504}:
+                        continue
+                    if response.status_code == 429:
+                        raise MediaError(
+                            "Gemini limiti vaqtincha to'ldi. Birozdan keyin urinib ko'ring."
+                        )
+                    if response.status_code in {401, 403}:
+                        raise MediaError("Gemini ulanishini bot administratori tekshirishi kerak.")
+                    if response.is_error or response.is_redirect:
+                        raise MediaError(
+                            "Gemini vaqtincha javob bera olmadi. Keyinroq urinib ko'ring."
+                        )
+                    raw = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        raw.extend(chunk)
+                        if len(raw) > 262144:
+                            raise MediaError("Gemini javobi juda katta. Kichikroq PDF yuboring.")
+                break
         candidate = json.loads(raw)["candidates"][0]
         if candidate.get("finishReason") != "STOP":
             raise MediaError("Gemini javobni yakunlay olmadi. Kichikroq PDF yuboring.")

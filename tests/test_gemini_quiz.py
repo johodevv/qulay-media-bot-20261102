@@ -29,7 +29,7 @@ ITEM = {
 }
 
 
-def mock_gemini(monkeypatch, draft, checks, *, status=200):
+def mock_gemini(monkeypatch, draft, checks, *, status=200, first_unavailable=False):
     calls = []
 
     def respond(request):
@@ -40,9 +40,11 @@ def mock_gemini(monkeypatch, draft, checks, *, status=200):
         assert body["generationConfig"]["responseMimeType"] == "application/json"
         assert "tools" not in body
         calls.append(json.loads(body["contents"][0]["parts"][0]["text"]))
+        if first_unavailable and len(calls) == 1:
+            return httpx.Response(503)
         if status != 200:
             return httpx.Response(status)
-        output = draft if len(calls) == 1 else checks
+        output = draft if len(calls) == 1 + first_unavailable else checks
         return httpx.Response(
             200,
             json={
@@ -99,6 +101,21 @@ async def test_gemini_rate_limit_uses_readable_error(settings, monkeypatch):
     mock_gemini(monkeypatch, None, None, status=429)
     with pytest.raises(MediaError, match="limiti"):
         await gemini_quiz.generate_pdf_quiz([SOURCE], settings, Mock(), AsyncMock())
+
+
+@pytest.mark.asyncio
+async def test_gemini_retries_server_overload_once(settings, monkeypatch):
+    calls = mock_gemini(
+        monkeypatch,
+        {"questions": [ITEM]},
+        {"checks": [{"id": 1, "correct": 1}]},
+        first_unavailable=True,
+    )
+    result = await gemini_quiz.generate_pdf_quiz(
+        [SOURCE], replace(settings, gemini_api_key="test-only-key"), Mock(), AsyncMock()
+    )
+    assert len(result) == 1 and calls[0] == calls[1]
+    assert len(calls) == 3 and "items" in calls[2]
 
 
 @pytest.mark.asyncio

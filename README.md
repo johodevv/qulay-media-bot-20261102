@@ -109,7 +109,7 @@ tekshiruvli savol chiqarilmaydi. Matn limiti 60 ming belgi. Natijani Telegramda
 ishlash, Word yoki PDFga olish mumkin. Kalit bo'lmasa oddiy testdan foydalaniladi.
 AI rejimidagi PDF matni Google'ga yuboriladi. Maxfiy hujjatlarni yubormang.
 Standart model `gemini-3.1-flash-lite`. Bot odatda 24 soatda 10 AI topshirig'ini
-qabul qiladi, har biriga ko'pi bilan 2 ta API so'rovi ketadi.
+qabul qiladi. Vaqtinchalik server xatosida har bosqich bir marta qayta sinanadi.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
 `Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
 kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.
