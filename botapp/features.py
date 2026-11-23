@@ -243,7 +243,7 @@ class FeatureHandlers:
             "Har bir fayldan alohida test tayyorlanadi.\n\n"
             "Bot javob variantlarini ko'rsatadi, tanlovingizni tekshiradi "
             "va yakunda ballni hisoblaydi.\n\n"
-            "Word namuna: raqamlangan savol, keyingi qatorda «Javob:» yoki «Ж:».\n"
+            "Namuna: raqamlangan savol, keyingi qatorda «Javob:» yoki «Ж:».\n"
             "Limit: har faylga 10 MB va 100 savol. "
             "PDF: 30 matnli yoki 5 skanerlangan sahifa.",
             reply_markup=self.parent.keyboard(user_id),
@@ -410,7 +410,7 @@ class FeatureHandlers:
                     else:
                         quiz = self.store.quiz(user_id, value)
                         ext = "docx" if action == "word" else "pdf"
-                        output = root / f"test-savollari.{ext}"
+                        output = root / f"test-varaqasi.{ext}"
                         await self.thread(export_quiz, quiz["questions"], output, action)
                         with output.open("rb") as stream:
                             await bot.send_document(
@@ -481,8 +481,8 @@ class FeatureHandlers:
             [
                 [Button("▶️ Testni boshlash", callback_data=f"quiz:start:{quiz_id}")],
                 [
-                    Button("📝 Word olish", callback_data=f"quiz:word:{quiz_id}"),
-                    Button("📄 PDF olish", callback_data=f"quiz:pdf:{quiz_id}"),
+                    Button("📝 Word test", callback_data=f"quiz:word:{quiz_id}"),
+                    Button("📄 PDF test", callback_data=f"quiz:pdf:{quiz_id}"),
                 ],
             ]
         )

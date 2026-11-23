@@ -95,10 +95,11 @@ yangi admin avval botga `/start` yuborishi kerak. Oddiy admin faqat panelni ko'r
 
 «Word / PDFdan test» yoki `/quiz` tugmasidan savol-javobli Word (.docx) yoki PDF
 yuboring. Ketma-ket yuborilgan fayllar navbatdan o'tib, har biri alohida test bo'ladi.
-Raqamlangan Word savolidan keyingi xatboshi «Javob:» yoki «Ж:» bilan boshlansa,
+Raqamlangan Word yoki PDF savolidan keyingi qator «Javob:» yoki «Ж:» bilan boshlansa,
 bot manbadan A/B/C/D variantlarini tuzadi va ballni o'zi hisoblaydi. Uzun javobda
 manbadan olingan gapdagi bo'sh joy to'ldiriladi. Asl javob Telegramda tanlovdan
-keyin yuklab olinadi. Word/PDF varaqasida savollar va to'liq javoblar alohida bo'limlarda.
+keyin yuklab olinadi. «Word test» va «PDF test» varaqalarida javob variantlari
+va oxirida alohida javob kaliti bor.
 `1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
 `Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
 kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.

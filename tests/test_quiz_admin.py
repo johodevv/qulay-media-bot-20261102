@@ -13,6 +13,7 @@ from telegram.ext import Application
 from botapp.handlers import Handlers
 from botapp.media import MediaError
 from botapp.quiz import export_quiz, parse_questions, read_quiz_docx, read_quiz_pdf
+from botapp.quiz_choices import make_variant_questions
 from botapp.service import ConversionService
 from botapp.store import BotStore
 from botapp.ui import ADMIN, QUIZ
@@ -167,6 +168,49 @@ def update_for(user_id, text=None, callback=None, document=None):
         callback_query=callback,
         update_id=user_id,
     )
+
+
+def test_text_pdf_with_wrapped_prompt_and_long_answers_makes_printable_tests(tmp_path, settings):
+    answer = (
+        "Mashqni bajarish uchun o'quvchilar kerakli ma'lumotlarni daftarga yozadilar.\n"
+        + "Guruh a'zolari yangi mavzuni muhokama qilish uchun misollar keltiradi.\n" * 12
+        + "SAQLANGAN ASL JAVOB"
+    )
+    source = tmp_path / "study.pdf"
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text(
+            (45, 45),
+            "1. Birinchi savol qaysi mavzuga\n"
+            "oid?\n"
+            f"Javob: {answer}\n"
+            "2. Ikkinchi savol qanday?\n"
+            "Javob: O'quvchilar muhim qoidalarni alohida daftar sahifasiga yozadilar.",
+        )
+        pdf.save(source)
+    payload = read_quiz_pdf(source, settings)
+    assert not payload["scanned"]
+    questions = make_variant_questions(payload["questions"])
+    assert len(questions) == 2
+    assert questions[0]["question"].startswith("Birinchi savol qaysi mavzuga oid?")
+    assert "SAQLANGAN ASL JAVOB" in questions[0]["source_answer"]
+    for question in questions:
+        assert len(set(question["options"])) == 4
+        assert question["options"][question["correct"]] in question["source_answer"]
+
+    for kind, extension in (("word", "docx"), ("pdf", "pdf")):
+        path = tmp_path / f"test.{extension}"
+        export_quiz(questions, path, kind)
+        if kind == "word":
+            text = "\n".join(p.text for p in Document(path).paragraphs)
+        else:
+            with fitz.open(path) as pdf:
+                assert "Javoblar kaliti" not in pdf[0].get_text()
+                text = "\n".join(p.get_text() for p in pdf)
+        paper, key = text.split("Javoblar kaliti", 1)
+        assert sum(line.startswith("D) ") for line in paper.splitlines()) == 2
+        assert questions[0]["options"][questions[0]["correct"]] in key
+        assert "SAQLANGAN ASL JAVOB" not in text
 
 
 async def test_revoked_admin_stale_callback_is_denied(tmp_path, settings):

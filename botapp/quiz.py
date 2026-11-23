@@ -43,6 +43,7 @@ _ANSWER_REFERENCE = re.compile(
     r"(\d{1,3})\s*[-–]?\s*савол(?:да ёритилган| билан бир хил)[.!]?", re.I
 )
 _QUESTION = re.compile(r"^\s*(\d{1,3})\s*[.)]\s*(.*)$")
+_EXPLICIT_QUESTION = re.compile(r"^(?:savol|савол|question|вопрос)\s*[:：]\s*(.*)$", re.I)
 _OPTION = re.compile(r"(?<!\w)([*+]?)([A-FАВСДЕ])\s*[.)]\s*", re.I)
 _KEY_HEADING = re.compile(
     r"^\s*(?:javoblar(?:i)?|javoblar\s+kaliti|answers?|ответы|answer\s+key)\s*[:：]?\s*$", re.I
@@ -72,29 +73,59 @@ def read_quiz_docx(path: Path) -> dict:
             )
             rows.append((text, highlighted))
 
+    return {"questions": _parse_document_questions(rows), "scanned": False}
+
+
+def _parse_document_questions(rows: list[tuple[str, bool]], *, pdf: bool = False) -> list[dict]:
     starts = []
     for index, (text, highlighted) in enumerate(rows):
         number = _QUESTION.fullmatch(text)
-        next_is_answer = index + 1 < len(rows) and _OPEN_ANSWER.match(rows[index + 1][0])
-        if number and number[2] and (highlighted or next_is_answer):
-            starts.append((index, int(number[1]), _text(number[2])))
+        explicit = _EXPLICIT_QUESTION.fullmatch(text)
+        if not number and not explicit:
+            continue
+        prompt = number[2] if number else explicit[1]
+        answer_start = index + 1
+        # A PDF can wrap a question over a few visual lines before the answer marker.
+        if pdf:
+            while answer_start < min(index + 4, len(rows)):
+                line = rows[answer_start][0]
+                if (
+                    _OPEN_ANSWER.match(line)
+                    or _QUESTION.match(line)
+                    or _EXPLICIT_QUESTION.match(line)
+                    or _OPTION.match(line)
+                ):
+                    break
+                prompt += " " + line
+                answer_start += 1
+        next_is_answer = answer_start < len(rows) and _OPEN_ANSWER.match(rows[answer_start][0])
+        if prompt and (highlighted or explicit or next_is_answer):
+            starts.append((index, answer_start, int(number[1]) if number else None, _text(prompt)))
 
-    if not starts or not any(
-        index + 1 < len(rows) and _OPEN_ANSWER.match(rows[index + 1][0]) for index, _, _ in starts
+    # Standard multiple-choice and answer-key files keep their original parser.
+    # In text PDFs, an unpaired answer marker may belong to a multiple-choice block.
+    paired = {
+        start
+        for _, start, _, _ in starts
+        if start < len(rows) and _OPEN_ANSWER.match(rows[start][0])
+    }
+    if not paired or (
+        pdf
+        and any(i not in paired and _OPEN_ANSWER.match(text) for i, (text, _) in enumerate(rows))
     ):
-        questions = parse_questions("\n".join(text for text, _ in rows))
-        return {"questions": questions, "scanned": False}
+        return parse_questions("\n".join(text for text, _ in rows))
 
     if len(starts) > QUIZ_MAX_QUESTIONS:
         raise MediaError("Bitta faylda ko'pi bilan 100 savol bo'lsin.")
     questions = []
     answers_by_number = {}
-    for offset, (start, number, question) in enumerate(starts):
+    for offset, (_, answer_start, number, question) in enumerate(starts):
         end = starts[offset + 1][0] if offset + 1 < len(starts) else len(rows)
-        if start + 1 >= end or not (marker := _OPEN_ANSWER.match(rows[start + 1][0])):
+        number = number if number is not None else offset + 1
+        if answer_start >= end or not (marker := _OPEN_ANSWER.match(rows[answer_start][0])):
             raise MediaError(f"{number}-savoldan keyin «Javob:» yoki «Ж:» yozing.")
-        parts = [rows[start + 1][0][marker.end() :].strip()]
-        parts.extend(text for text, _ in rows[start + 2 : end])
+        parts = [rows[answer_start][0][marker.end() :].strip()]
+        parts.extend(text for text, _ in rows[answer_start + 1 : end])
         answer = "\n".join(part for part in parts if part)
         if not answer or len(question) > 2200:
             raise MediaError(f"{number}-savol matni yoki javobi to'liq emas.")
@@ -108,7 +139,7 @@ def read_quiz_docx(path: Path) -> dict:
             matches = answers_by_number.get(int(reference[1]), [])
             if len(matches) == 1 and not _ANSWER_REFERENCE.fullmatch(matches[0]):
                 question["model_answer"] = f"{answer}\n\n{matches[0]}"
-    return {"questions": questions, "scanned": False}
+    return questions
 
 
 def _text(value: str) -> str:
@@ -286,7 +317,7 @@ def parse_questions(text: str) -> list[dict]:
 def read_quiz_pdf(path: Path, settings: Settings) -> dict:
     if not 0 < path.stat().st_size <= QUIZ_MAX_BYTES:
         raise MediaError("Test uchun PDF 10 MB dan oshmasin.")
-    pages, scanned = [], 0
+    pages, scanned, characters = [], 0, 0
     deadline = time.monotonic() + min(settings.job_timeout, 120)
     try:
         with fitz.open(path) as document:
@@ -306,7 +337,7 @@ def read_quiz_pdf(path: Path, settings: Settings) -> dict:
                         raise MediaError(
                             "Skanerlangan test 5 sahifadan oshmasin. Matnli PDF 30 sahifagacha."
                         )
-                    if not ocr_available(settings):
+                    if scanned == 1 and not ocr_available(settings):
                         raise MediaError(
                             "Skanerlangan PDF uchun matn tanish dasturi serverda tayyor emas."
                         )
@@ -324,12 +355,16 @@ def read_quiz_pdf(path: Path, settings: Settings) -> dict:
                         ).strip()
                     finally:
                         image.close()
+                characters += len(text)
+                if characters > 350000:
+                    raise MediaError("PDFda matn juda ko'p. Faylni qismlarga bo'lib yuboring.")
                 pages.append(text)
     except MediaError:
         raise
     except (fitz.FileDataError, RuntimeError, ValueError, pytesseract.TesseractError) as exc:
         raise MediaError("PDFni o'qib bo'lmadi. Matni tiniq va parolsiz fayl yuboring.") from exc
-    return {"questions": parse_questions("\n".join(pages)), "scanned": bool(scanned)}
+    rows = [(line.strip(), False) for page in pages for line in page.splitlines() if line.strip()]
+    return {"questions": _parse_document_questions(rows, pdf=True), "scanned": bool(scanned)}
 
 
 def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
@@ -370,9 +405,6 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
                 f"{index}. {LABELS[question['correct']]} — "
                 f"{question['options'][question['correct']]}"
             )
-            for line in question.get("source_answer", "").splitlines():
-                if line:
-                    doc.add_paragraph(line)
         doc.save(output)
         return
     if kind != "pdf":
@@ -415,11 +447,6 @@ def export_quiz(questions: list[dict], output: Path, kind: str) -> None:
                 ),
                 normal,
             )
-        )
-        story.extend(
-            Paragraph(escape(line), normal)
-            for line in question.get("source_answer", "").splitlines()
-            if line
         )
     SimpleDocTemplate(
         str(output),

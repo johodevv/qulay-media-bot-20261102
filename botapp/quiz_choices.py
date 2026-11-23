@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import random
 import re
+from collections import defaultdict
 from dataclasses import dataclass
+from itertools import chain
 
 from botapp.media import MediaError
 
@@ -59,6 +61,8 @@ def _gaps(answer: str) -> list[Gap]:
             continue
         for kind, pattern in _FIGURES:
             for match in pattern.finditer(clause):
+                if len(figures) == 12:
+                    break
                 # Match units when suggesting other durations.
                 unit = _key(match[0]).split()[-1] if kind == "duration" else ""
                 figures.append(_gap(f"{kind}:{unit}", clause, *match.span(1)))
@@ -71,6 +75,8 @@ def _gaps(answer: str) -> list[Gap]:
         )
         for size in (3, 2):
             for index in range(2, len(words) - size):
+                if len(candidate_group) == (48 if candidate_group is phrases else 16):
+                    break
                 group = words[index : index + size]
                 start, end = group[0].start(), group[-1].end()
                 value = clause[start:end]
@@ -81,28 +87,33 @@ def _gaps(answer: str) -> list[Gap]:
                     and len(group[-1][0]) >= 5
                 ):
                     candidate_group.append(_gap(f"phrase:{size}", clause, start, end))
-    return phrases[:48] + introductions[:16] + figures[:12]
+    return phrases + introductions + figures
 
 
-def _distractors(gap: Gap, pool: dict[str, str], rng: random.Random) -> list[str]:
+def _distractors(
+    gap: Gap, pool: tuple[str, ...], similar: list[str], rng: random.Random
+) -> list[str]:
     correct = _key(gap.answer)
     context = f" {_key(gap.left)} {_key(gap.right)} "
     if f" {correct} " in context:
         return []
-    keys = list(pool)
-    rng.shuffle(keys)
-    if gap.kind.startswith("phrase:"):
-        keys.sort(key=lambda key: key.endswith(correct[-3:]), reverse=True)
     selected = []
-    for key in keys:
+    # Sample first, then scan only as far as required if sampled options collide.
+    for key in chain(
+        rng.sample(similar, min(len(similar), 12)),
+        similar,
+        rng.sample(pool, min(len(pool), 12)),
+        pool,
+    ):
         if (
             key == correct
+            or key in selected
             or f" {key} " in context
             or f" {key} " in f" {correct} "
             or f" {correct} " in f" {key} "
         ):
             continue
-        selected.append(pool[key])
+        selected.append(key)
         if len(selected) == 3:
             break
     return selected
@@ -125,6 +136,13 @@ def make_variant_questions(questions: list[dict]) -> list[dict]:
             if key := _key(gap.answer):
                 pools.setdefault(gap.kind, {}).setdefault(key, gap.answer)
 
+    keys = {kind: tuple(pool) for kind, pool in pools.items()}
+    suffixes: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for kind, pool in keys.items():
+        if kind.startswith("phrase:"):
+            for key in pool:
+                suffixes[kind, key[-3:]].append(key)
+
     result = []
     for index, (question, gaps) in enumerate(zip(questions, candidates, strict=True), 1):
         if "model_answer" not in question:
@@ -133,15 +151,16 @@ def make_variant_questions(questions: list[dict]) -> list[dict]:
         seed = f"{index}:{question['question']}".encode()
         rng = random.Random(hashlib.sha256(seed).digest())
         for gap in gaps:
-            if not _key(gap.answer):
+            key = _key(gap.answer)
+            if not key:
                 continue
-            other = _distractors(gap, pools[gap.kind], rng)
-            if len(other) != 3:
+            other = _distractors(gap, keys[gap.kind], suffixes.get((gap.kind, key[-3:]), []), rng)
+            if len(other) != 3 and not (gap.kind == "brief" and other and len(keys["brief"]) < 4):
                 continue
             prompt = question["question"]
             if gap.kind != "brief":
                 prompt += f"\n\nManbadagi javobni to'ldiring.\n{gap.context}"
-            options = [gap.answer, *other]
+            options = [gap.answer, *(pools[gap.kind][key] for key in other)]
             rng.shuffle(options)
             result.append(
                 {

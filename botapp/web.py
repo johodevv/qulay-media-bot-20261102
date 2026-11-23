@@ -37,7 +37,7 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
                 "max_input_mb": settings.max_input_bytes // MB,
                 "local_api": settings.local_mode,
                 "office_enabled": bool(settings.soffice),
-                "version": "0.5.2",
+                "version": "0.5.3",
             },
             status=200 if ready or handoff else 503,
         )
