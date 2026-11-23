@@ -51,6 +51,8 @@ class Settings:
     webhook_url: str = ""
     webhook_secret: str = field(default="", repr=False)
     allowed_user_ids: frozenset[int] = frozenset()
+    owner_admin_id: int = 0
+    state_db_path: Path = ROOT / "data" / "bot.sqlite3"
     api_url: str = ""
     local_mode: bool = False
     embedded_api: bool = False
@@ -86,6 +88,8 @@ class Settings:
                 os.getenv("WEBHOOK_URL", "").strip() or os.getenv("RENDER_EXTERNAL_URL", "")
             ).rstrip("/"),
             webhook_secret=os.getenv("WEBHOOK_SECRET", "").strip(),
+            owner_admin_id=int(os.getenv("OWNER_ADMIN_ID", "0") or "0"),
+            state_db_path=Path(os.getenv("STATE_DB_PATH", str(ROOT / "data" / "bot.sqlite3"))),
             allowed_user_ids=frozenset(
                 int(item.strip())
                 for item in os.getenv("ALLOWED_USER_IDS", "").split(",")
@@ -117,6 +121,8 @@ class Settings:
         return settings
 
     def validate(self, require_token: bool = True) -> None:
+        if not 0 <= self.owner_admin_id < 2**52:
+            raise ValueError("OWNER_ADMIN_ID noto'g'ri.")
         if require_token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", self.token):
             raise ValueError(".env faylidagi BOT_TOKEN ga BotFather tokenini yozing.")
         if self.mode not in {"polling", "webhook", "standby"}:

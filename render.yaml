@@ -7,6 +7,8 @@ services:
     envVars:
       - key: BOT_TOKEN
         sync: false
+      - key: OWNER_ADMIN_ID
+        sync: false
       - key: BOT_MODE
         value: webhook
       - key: WEBHOOK_SECRET

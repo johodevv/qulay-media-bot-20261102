@@ -15,6 +15,7 @@ from botapp.handlers import Handlers
 from botapp.local_api import local_api_server
 from botapp.media import ocr_available
 from botapp.service import ConversionService
+from botapp.store import BotStore
 from botapp.web import create_web_app
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,9 @@ async def serve(settings: Settings) -> None:
     application = builder.build()
     service = ConversionService(settings)
     ocr_enabled = await asyncio.to_thread(ocr_available, settings)
-    Handlers(service, settings, ocr_enabled).register(application)
+    store = BotStore(settings.state_db_path, settings.owner_admin_id)
+    handlers = Handlers(service, settings, ocr_enabled, store)
+    handlers.register(application)
     state = {"ready": False, "service": service}
     runner = web.AppRunner(create_web_app(application, settings, state), access_log=None)
     await runner.setup()
@@ -59,6 +62,9 @@ async def serve(settings: Settings) -> None:
                     BotCommand("start", "Boshlash va yo'riqnoma"),
                     BotCommand("menu", "Xizmatlar menyusini ochish"),
                     BotCommand("status", "Topshiriq holati"),
+                    BotCommand("quiz", "PDFdan test tayyorlash"),
+                    BotCommand("id", "Telegram ID raqamim"),
+                    BotCommand("admin", "Admin paneli"),
                     BotCommand("cancel", "Tanlovni bekor qilish"),
                     BotCommand("privacy", "Fayllar qanday saqlanadi"),
                 ]
@@ -89,6 +95,7 @@ async def serve(settings: Settings) -> None:
                 if application.updater.running:
                     await application.updater.stop()
                 await application.stop()
+                await handlers.features.stop()
                 await service.stop()
     finally:
         state["ready"] = False

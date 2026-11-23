@@ -13,9 +13,11 @@ from telegram.ext import (
 )
 
 from botapp.config import MB, Settings
+from botapp.features import FeatureHandlers
 from botapp.media import RESOLUTIONS, MediaError
 from botapp.office import OFFICE_MAX_BYTES
 from botapp.service import ConversionService, Upload
+from botapp.store import BotStore
 from botapp.ui import CANCEL, SERVICES, STATUS, main_keyboard
 
 logger = logging.getLogger(__name__)
@@ -93,10 +95,20 @@ def video_keyboard(nonce: str, short_edge: int = 0) -> InlineKeyboardMarkup:
 
 
 class Handlers:
-    def __init__(self, service: ConversionService, settings: Settings, ocr_enabled: bool):
+    def __init__(
+        self,
+        service: ConversionService,
+        settings: Settings,
+        ocr_enabled: bool,
+        store: BotStore | None = None,
+    ):
         self.service = service
         self.settings = settings
         self.ocr_enabled = ocr_enabled
+        self.features = FeatureHandlers(self, store) if store else None
+
+    def keyboard(self, user_id: int):
+        return main_keyboard(bool(self.features and self.features.store.is_admin(user_id)))
 
     async def allowed(self, update: Update) -> bool:
         user, chat = update.effective_user, update.effective_chat
@@ -128,13 +140,14 @@ class Handlers:
             "📄 Rasm → PDF\n"
             "📝 Rasm → Word\n\n"
             "📑 Word → PDF yoki PDF → Word\n\n"
+            "🧩 Savol-javobli PDFdan Telegram testi va Word/PDF test varaqasi\n\n"
             "Xizmatni tanlang → fayl yuboring → kerakli natijani belgilang.\n"
             "Bir hujjat uchun bir nechta rasm yuborishingiz mumkin.\n\n"
             f"Limit: jami {self.settings.max_input_bytes // MB} MB, "
             f"{self.settings.max_images} ta rasm, "
             f"video {self.settings.max_video_seconds // 60} daqiqagacha.\n"
             "/privacy — fayllar haqida",
-            reply_markup=main_keyboard(),
+            reply_markup=self.keyboard(update.effective_user.id),
         )
 
     async def menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -142,21 +155,28 @@ class Handlers:
             await update.effective_message.reply_text(
                 "Xizmatni tanlang. Menyuni xabar qatoridagi klaviatura belgisi bilan "
                 "yashirib yoki qayta ochishingiz mumkin.",
-                reply_markup=main_keyboard(),
+                reply_markup=self.keyboard(update.effective_user.id),
             )
 
     async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self.allowed(update):
             return
         user_id = update.effective_user.id
-        await update.effective_message.reply_text(
-            self.service.status_text(user_id), reply_markup=main_keyboard()
-        )
+        if self.features and user_id in self.features.tasks:
+            text = "⏳ Test topshirig'i bajarilmoqda yoki navbatda. Natija shu chatga yuboriladi."
+        elif (session := self.service.sessions.get(user_id)) and session.mode == "quiz":
+            text = "🧩 Savol-javobli PDF faylini yuboring."
+        else:
+            text = self.service.status_text(user_id)
+        await update.effective_message.reply_text(text, reply_markup=self.keyboard(user_id))
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if await self.allowed(update):
+            if self.features:
+                self.features.cancel(update.effective_user.id)
             await update.effective_message.reply_text(
-                self.service.cancel(update.effective_user.id), reply_markup=main_keyboard()
+                self.service.cancel(update.effective_user.id),
+                reply_markup=self.keyboard(update.effective_user.id),
             )
 
     async def privacy(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -168,13 +188,20 @@ class Handlers:
                 "Takroriy topshiriqni tezlatish uchun tayyor Telegram natijasiga havola "
                 f"{self.settings.session_ttl // 60} daqiqagacha xotirada saqlanishi mumkin.\n\n"
                 "Navbat va tanlovlar xotirada: bot qayta ishga tushsa qayta yuborish kerak. "
-                "Xizmat hujjatini yuborishdan oldin tashkilotingiz tartibini tekshiring."
+                "Xizmat hujjatini yuborishdan oldin tashkilotingiz tartibini tekshiring.\n\n"
+                "Statistika uchun Telegram ID, ism, username va faollik vaqti saqlanadi; "
+                "ularni bot adminlari ko'radi. Telefon raqamingiz olinmaydi. "
+                "Test savollari va natijasi 24 soat amal qiladi; eskirgan ma'lumotlar "
+                "keyingi murojaatda o'chiriladi. "
+                "Foydalanuvchilar ro'yxati zaxirasi faqat bosh adminga beriladi."
             )
 
     async def receive(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self.allowed(update):
             return
         message = update.effective_message
+        if self.features and await self.features.handle_message(update, context):
+            return
         text = getattr(message, "text", None)
         if text == STATUS:
             await self.status(update, context)
@@ -187,7 +214,9 @@ class Handlers:
             try:
                 self.service.select_service(update.effective_user.id, mode)
             except MediaError as exc:
-                await message.reply_text(str(exc), reply_markup=main_keyboard())
+                await message.reply_text(
+                    str(exc), reply_markup=self.keyboard(update.effective_user.id)
+                )
                 return
             instructions = {
                 "video": "🎬 Videoni yuboring. "
@@ -201,7 +230,9 @@ class Handlers:
                 "pdf-docx": "📃 PDF faylini yuboring. Word avtomatik tayyorlanadi.\n"
                 "Limit: 30 MB, 50 sahifa. Skanerlangan sahifalar rasm bo'lib qolishi mumkin.",
             }
-            await message.reply_text(instructions[mode], reply_markup=main_keyboard())
+            await message.reply_text(
+                instructions[mode], reply_markup=self.keyboard(update.effective_user.id)
+            )
             return
         if message.photo:
             media, kind = message.photo[-1], "image"
@@ -226,7 +257,8 @@ class Handlers:
                 return
         else:
             await message.reply_text(
-                "Pastdagi tugmalardan xizmatni tanlang.", reply_markup=main_keyboard()
+                "Pastdagi tugmalardan xizmatni tanlang.",
+                reply_markup=self.keyboard(update.effective_user.id),
             )
             return
         selected = self.service.sessions.get(update.effective_user.id)
@@ -360,11 +392,13 @@ class Handlers:
         logger.error("Telegram hodisasi xatosi: %s", type(context.error).__name__)
 
     def register(self, application: Application) -> None:
+        if self.features:
+            self.features.register(application)
         application.add_handler(CommandHandler(["start", "help"], self.start))
         application.add_handler(CommandHandler(["menu", "menyu"], self.menu))
         application.add_handler(CommandHandler("status", self.status))
         application.add_handler(CommandHandler("cancel", self.cancel))
         application.add_handler(CommandHandler("privacy", self.privacy))
-        application.add_handler(CallbackQueryHandler(self.choose))
+        application.add_handler(CallbackQueryHandler(self.choose, pattern=r"^(?!admin:|quiz:)"))
         application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, self.receive))
         application.add_error_handler(self.error)

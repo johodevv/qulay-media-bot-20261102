@@ -198,3 +198,22 @@ ixchamlik 4/5 (asosiy oqim uch xizmat; texnik qo'llanma batafsil). O'rtacha 4.0/
 Keyingi tekshiruv: haqiqiy katta video va rasmni bot orqali yuborish; doimiy bepul
 monitoringni yakunlash. Foydalanuvchi bahoga qo'shilishi kutiladi: tayyor natija va
 uning amaliy chegaralari dalillar bilan ajratilgan.
+
+## Admin va test xizmatlari 2026-11-23
+
+- Oldingi to'liq to'plam: 69 passed (209.61 s).
+- Yangi admin/test to'plami: 19 ta; oxirgi maqsadli tekshiruvlar bilan jami
+  35 passed (10.00 s). Ikkita mavjud PTB RetryAfter deprecation warning bor.
+- Ruxsatlar: bosh admin o'zgarmaydi; oddiy admin huquq bera olmaydi;
+  bekor qilingan adminning eski tugmasi ishlamaydi; boshqa foydalanuvchi testiga kirilmaydi.
+- Hisoblash: takroriy update va ikki marta javob bosish hisobni oshirmaydi;
+  SQLite qayta ochilganda ball saqlanadi; zaxira tiklash takroriy hisob qo'shmaydi.
+- PDF: aniq inline/oxirgi javob kaliti, belgilangan variant, oddiy savol-javob;
+  yetishmagan/zid/takroriy javoblar rad etiladi. Native PDFdan haqiqiy matn o'qildi.
+- Telegram handler yo'li: xizmat tanlash, PDF topshirish, fonda parser, test boshlash,
+  javob berish va bekor qilish (task boshlanishidan oldin ham) mock bot bilan tekshirildi.
+- Word va PDFning 4 savolli o'zbek lotin/kirill namunalari yaratildi. Canonical
+  render_docx.py va Poppler bilan ikki sahifasi ko'zdan kechirildi; javob kaliti
+  alohida sahifada, matn tanlanadi, title ostidagi template border olib tashlandi.
+- Render Free bazasi vaqtinchalik. Doimiy diskli VPS yoki /backup + /restore
+  kerak; restart/deploydan keyingi avtomatik saqlanish kafolatlanmaydi.

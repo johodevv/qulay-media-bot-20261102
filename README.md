@@ -84,7 +84,33 @@ OCR natijasidagi ism, sana, raqamlarni tekshiring; murakkab sahifa aynan tiklanm
 Loglarda faylni olish, aylantirish va yuborish vaqtlari alohida o'lchanadi;
 matn, fayl nomi va foydalanuvchi identifikatorlari bu o'lchovlarga yozilmaydi.
 
-## 20 MB dan katta fayllar
+## Admin paneli va PDFdan test
+
+`OWNER_ADMIN_ID` ga bosh admin Telegram ID raqamini yozing. `/id` raqamni ko'rsatadi.
+`/admin` yoki «Admin paneli» tugmasida jami foydalanuvchilar, bugungi / 7 / 30 kunlik
+faollik, ism, username, ID va oxirgi faol vaqt ko'rinadi. Hisob yangi versiya ishga
+tushgandan boshlanadi; eski chatlar Telegram orqali orqaga yig'ilmaydi.
+Faqat bosh admin `/addadmin ID` va `/removeadmin ID` bilan huquq beradi / oladi;
+yangi admin avval botga `/start` yuborishi kerak. Oddiy admin faqat panelni ko'radi.
+
+«PDFdan test» yoki `/quiz`: savollar va aniq javoblari yozilgan PDFni yuboring.
+`1. Savol` / `A) Variant` / `B) Variant` / `Javob: A` yoki oxirida
+`Javoblar: 1-A, 2-B` formati ishlaydi. Oddiy `Savol: ...` / `Javob: ...` juftlari
+kamida ikkita turli javobdan variantlar tuzadi; nusxasini tekshirish so'raladi.
+Javobsiz yoki zid kalitli savollar taxmin qilinmaydi. Murakkab ikki ustunli PDF,
+formulalar va qo'lda yozilgan matn uchun tuzilishni soddalashtirish talab qilinishi mumkin.
+Telegramda birma-bir javob berish va yakuniy ball, Word/PDFda savollar va alohida
+sahifada javob kaliti mavjud. Limit: 10 MB, 30 matnli yoki 5 skanerlangan sahifa,
+100 savol. Video uchun mavjud katta fayl limiti o'zgarishsiz.
+
+SQLite foydalanuvchilarni va 24 soatlik testlarni saqlaydi. `STATE_DB_PATH` yoziladigan
+doimiy diskda bo'lsin; VPS skripti `qulay-bot-state` volume'ini ulaydi. Render Free
+fayl tizimi vaqtinchalik: redeploy/restartda baza yo'qolishi mumkin. Bosh admin
+`/backup` bilan foydalanuvchilar/adminlar JSON zaxirasini oladi va `/restore` bilan
+tiklaydi. Tiklash mavjud yozuvlarni birlashtiradi, hisoblarni ikki marta qo'shmaydi;
+zaxiradagi adminlar qayta qo'shiladi. PDF mazmuni zaxiraga kiritilmaydi.
+
+## Katta fayllar sozlamasi
 
 Oddiy Telegram Bot API yuklab olishni 20 MB bilan cheklaydi. Katta fayllar uchun
 Docker ichida rasmiy Telegram Bot API serveri manbadan kompilyatsiya qilinadi va
