@@ -207,6 +207,7 @@ class VideoInfo:
     duration: float
     has_audio: bool
     fps: float = 30
+    mp4_aac_bitrate: int = 0
 
 
 async def probe_video(path: Path, settings: Settings) -> VideoInfo:
@@ -247,7 +248,8 @@ async def probe_video(path: Path, settings: Settings) -> VideoInfo:
             rotation = float(side.get("rotation", rotation))
         if round(rotation) % 180 == 90:
             width, height = height, width
-        duration = float(metadata.get("format", {}).get("duration") or video.get("duration"))
+        container = metadata.get("format", {})
+        duration = float(container.get("duration") or video.get("duration"))
         if min(width, height) < 2 or not math.isfinite(duration) or duration <= 0:
             raise ValueError
     except (ValueError, TypeError, KeyError, StopIteration) as exc:
@@ -262,9 +264,19 @@ async def probe_video(path: Path, settings: Settings) -> VideoInfo:
             fps = 30
     except (ValueError, ZeroDivisionError):
         fps = 30
-    return VideoInfo(
-        width, height, duration, any(stream.get("codec_type") == "audio" for stream in streams), fps
-    )
+    audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
+    aac_bitrate = 0
+    if (
+        audio
+        and "mp4" in container.get("format_name", "").split(",")
+        and audio.get("codec_name") == "aac"
+        and audio.get("profile") == "LC"
+    ):
+        try:
+            aac_bitrate = int(audio.get("bit_rate") or 0)
+        except (TypeError, ValueError):
+            pass
+    return VideoInfo(width, height, duration, audio is not None, fps, aac_bitrate)
 
 
 def target_dimensions(info: VideoInfo, resolution: int) -> tuple[int, int]:
@@ -303,6 +315,12 @@ async def convert_video(
     input_bytes = (await asyncio.to_thread(source.stat)).st_size
     total_bitrate = int(min(settings.max_output_bytes, input_bytes) * 8 * 0.85 / info.duration)
     audio_bitrate = min(96000, max(24000, total_bitrate // 4)) if info.has_audio else 0
+    # AAC-LC from an MP4-compatible container can go straight into the new MP4.
+    audio_options = (
+        ["-c:a", "copy"]
+        if 0 < info.mp4_aac_bitrate <= audio_bitrate
+        else ["-c:a", "aac", "-b:a", str(audio_bitrate or 96000)]
+    )
     video_bitrate = max(16000, total_bitrate - audio_bitrate)
     fps = min(info.fps, 15 if fast else 30)
     # Drop surplus frames before resizing so the scaler only sees frames we encode.
@@ -353,10 +371,7 @@ async def convert_video(
         str(settings.ffmpeg_threads),
         "-filter_threads",
         "1",
-        "-c:a",
-        "aac",
-        "-b:a",
-        str(audio_bitrate or 96000),
+        *audio_options,
         "-movflags",
         "+faststart",
         "-t",

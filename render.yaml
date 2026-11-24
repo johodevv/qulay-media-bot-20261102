@@ -30,4 +30,4 @@ services:
       - key: MAX_OUTPUT_MB
         value: "1900"
       - key: FFMPEG_THREADS
-        value: "2"
+        value: "1"

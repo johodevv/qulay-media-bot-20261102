@@ -36,10 +36,11 @@ def create_web_app(application: Application, settings: Settings, state: dict) ->
                 else "starting",
                 "max_input_mb": settings.max_input_bytes // MB,
                 "max_videos": settings.max_videos,
+                "ffmpeg_threads": settings.ffmpeg_threads,
                 "local_api": settings.local_mode,
                 "office_enabled": bool(settings.soffice),
                 "gemini_configured": bool(settings.gemini_api_key),
-                "version": "0.5.7",
+                "version": "0.5.8",
             },
             status=200 if ready or handoff else 503,
         )

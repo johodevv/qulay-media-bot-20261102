@@ -14,7 +14,7 @@ from botapp.media import (
 )
 
 
-async def make_video(path, settings, size="256x144", audio=True, fps=10):
+async def make_video(path, settings, size="256x144", audio=True, fps=10, audio_rate="96k"):
     args = [
         settings.ffmpeg,
         "-hide_banner",
@@ -30,7 +30,7 @@ async def make_video(path, settings, size="256x144", audio=True, fps=10):
         args += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100"]
     args += ["-t", "0.6", "-c:v", "libx264", "-threads", "1", "-pix_fmt", "yuv420p"]
     if audio:
-        args += ["-c:a", "aac", "-shortest"]
+        args += ["-c:a", "aac", "-b:a", audio_rate, "-shortest"]
     await run_process([*args, str(path)], 30)
 
 
@@ -70,6 +70,36 @@ async def test_downscale_portrait_without_audio(ffmpeg_settings, tmp_path):
     result = await convert_video(source, output, 144, ffmpeg_settings)
     assert (result.width, result.height) == (144, 256)
     assert not result.has_audio
+
+
+@pytest.mark.parametrize("rate,copied", [("32k", True), ("160k", False)])
+async def test_only_aac_within_size_budget_is_copied(ffmpeg_settings, tmp_path, rate, copied):
+    source, output = tmp_path / "source.mp4", tmp_path / "result.mp4"
+    await make_video(source, ffmpeg_settings, "1280x720", audio_rate=rate)
+    result = await convert_video(source, output, 360, ffmpeg_settings)
+    assert result.has_audio
+    assert output.stat().st_size < source.stat().st_size
+
+    async def audio_hash(path):
+        return await run_process(
+            [
+                ffmpeg_settings.ffmpeg,
+                "-v",
+                "error",
+                "-i",
+                str(path),
+                "-map",
+                "0:a:0",
+                "-c:a",
+                "copy",
+                "-f",
+                "hash",
+                "pipe:1",
+            ],
+            30,
+        )
+
+    assert (await audio_hash(source) == await audio_hash(output)) is copied
 
 
 @pytest.mark.parametrize("size,expected", [("1920x1080", (640, 360)), ("256x144", (256, 144))])
