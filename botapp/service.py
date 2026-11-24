@@ -7,7 +7,7 @@ import secrets
 import tempfile
 import time
 from collections import OrderedDict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from telegram import Bot
@@ -44,6 +44,13 @@ class Session:
     uploads: list[Upload] = field(default_factory=list)
     touched: float = field(default_factory=time.monotonic)
     mode: str = ""
+    video_menu_id: int | None = None
+
+    def video_short_edge(self) -> int:
+        return min(
+            (min(item.width, item.height) for item in self.uploads if item.width and item.height),
+            default=0,
+        )
 
 
 @dataclass
@@ -51,9 +58,11 @@ class Progress:
     stage: str = "Fayl Telegram'dan olinmoqda…"
     percent: int | None = None
     started: float = field(default_factory=time.monotonic)
+    item: str = ""
 
     def text(self) -> str:
-        return progress_text(self.stage, self.percent, time.monotonic() - self.started)
+        text = progress_text(self.stage, self.percent, time.monotonic() - self.started)
+        return f"{self.item}\n{text}" if self.item else text
 
 
 @dataclass(frozen=True)
@@ -164,14 +173,19 @@ class ConversionService:
         session = self.sessions.get(user_id)
         if (
             not session
-            or upload.kind in {"video", "docx", "pdf"}
+            or upload.kind in {"docx", "pdf"}
             or (session.uploads and session.uploads[0].kind != upload.kind)
         ):
             if not session and len(self.sessions) >= self.settings.max_sessions:
                 raise MediaError("Bot band. Birozdan so'ng qayta urinib ko'ring.")
             session = Session(mode=session.mode if session else "")
             self.sessions[user_id] = session
-        if len(session.uploads) >= self.settings.max_images:
+        if upload.kind == "video" and len(session.uploads) >= self.settings.max_videos:
+            raise MediaError(
+                f"Bir to'plamga ko'pi bilan {self.settings.max_videos} ta video sig'adi. "
+                "Pastdagi siqish tugmasini bosing."
+            )
+        if upload.kind == "image" and len(session.uploads) >= self.settings.max_images:
             raise MediaError(
                 f"Bir hujjatga ko'pi bilan {self.settings.max_images} ta rasm qo'shing."
             )
@@ -203,10 +217,9 @@ class ConversionService:
             resolution = 0 if action == "video-fast" else int(action[6:])
             if resolution not in RESOLUTIONS and resolution != 0:
                 raise MediaError("Video o'lchami noto'g'ri.")
-            upload = session.uploads[0]
-            if resolution and upload.width and upload.height:
-                if resolution >= min(upload.width, upload.height):
-                    raise MediaError("Pastroq o'lchamni yoki «Hajmni kamaytirish»ni tanlang.")
+            short_edge = session.video_short_edge()
+            if resolution and short_edge and resolution >= short_edge:
+                raise MediaError("Pastroq o'lchamni yoki «Hajmni kamaytirish»ni tanlang.")
         elif session.uploads[0].kind in {"docx", "pdf"}:
             expected = "docx-pdf" if session.uploads[0].kind == "docx" else "pdf-docx"
             if action != expected:
@@ -237,8 +250,8 @@ class ConversionService:
             self.cancelled.add(user_id)
             if task := self.running.get(user_id):
                 task.cancel()
-            return "❌ Bekor qilinyapti. Bu topshiriq natijasi yuborilmaydi."
-        return "Tanlov va rasmlar tozalandi. Yangi rasm yoki video yuboring."
+            return "❌ Bekor qilinyapti. Qolgan fayllar yuborilmaydi."
+        return "Tanlov va fayllar tozalandi. Yangi rasm yoki video yuboring."
 
     async def start(self, bot: Bot) -> None:
         self.worker = asyncio.create_task(self.work(bot, self.queue), name="document-worker")
@@ -304,22 +317,59 @@ class ConversionService:
         self.progress[job.user_id] = progress
         ticker = asyncio.create_task(self.tick(bot, job, progress))
         try:
-            await self.process_files(bot, job, progress)
+            if job.action.startswith("video-") and len(job.uploads) > 1:
+                summary = await self.process_videos(bot, job, progress)
+            else:
+                await self.process_files(bot, job, progress)
+                summary = "✅ Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
         finally:
             ticker.cancel()
             await asyncio.gather(ticker, return_exceptions=True)
-            for path in self.api_files.pop(job.user_id, []):
-                # Faqat ishonchli ichki API qaytargan media fayli; katalog/DB o'chirilmaydi.
-                if path.is_relative_to(self.settings.api_dir.resolve()) and path.is_file():
+            await self.clean_api_files(job.user_id)
+        if job.user_id not in self.cancelled:
+            await self.notify(bot, job, summary)
+
+    async def process_videos(self, bot: Bot, job: Job, progress: Progress) -> str:
+        failures = []
+        count = len(job.uploads)
+        for index, upload in enumerate(job.uploads, 1):
+            progress.item = f"Video {index}/{count}"
+            progress.stage = "Fayl Telegram'dan olinmoqda…"
+            progress.percent = None
+            item = replace(job, uploads=(upload,))
+            try:
+                await self.process_files(bot, item, progress, filename=f"video-{index}.mp4")
+            except MediaError as exc:
+                failures.append(f"{index}-video: {exc}")
+            except TelegramError:
+                failures.append(f"{index}-video: Telegram'dan olish yoki yuborishda xato.")
+            finally:
+                await self.clean_api_files(job.user_id)
+        ready = count - len(failures)
+        if failures:
+            return f"{ready}/{count} ta video tayyor.\n\n" + "\n".join(failures)
+        return f"✅ {count} ta video tayyor. Har biri alohida fayl sifatida yuborildi."
+
+    async def clean_api_files(self, user_id: int) -> None:
+        root = self.settings.api_dir.resolve()
+        for path in self.api_files.pop(user_id, []):
+            # Faqat ishonchli ichki API qaytargan media fayli; katalog/DB o'chirilmaydi.
+            try:
+                if path.is_relative_to(root) and path.is_file():
                     await asyncio.to_thread(path.unlink, missing_ok=True)
+            except OSError:
+                logger.warning("Vaqtinchalik Bot API fayli tozalanmadi.")
 
     async def tick(self, bot: Bot, job: Job, progress: Progress) -> None:
         while True:
             await self.notify(bot, job, progress.text())
             await asyncio.sleep(4)
 
-    async def process_files(self, bot: Bot, job: Job, progress: Progress) -> None:
-        queue_seconds = max(0, time.monotonic() - job.queued_at)
+    async def process_files(
+        self, bot: Bot, job: Job, progress: Progress, *, filename: str | None = None
+    ) -> None:
+        queue_seconds = max(0, progress.started - job.queued_at)
+        caption_prefix = f"{progress.item}\n" if progress.item else ""
         if cached := self.cached_result(job):
             progress.stage = "Oldingi tayyor natija Telegram'dan yuborilmoqda…"
             started = time.monotonic()
@@ -327,8 +377,8 @@ class ConversionService:
                 await bot.send_document(
                     chat_id=job.chat_id,
                     document=cached.file_id,
-                    filename=cached.filename,
-                    caption=cached.caption,
+                    filename=filename or cached.filename,
+                    caption=caption_prefix + cached.caption,
                     read_timeout=max(600, self.settings.job_timeout),
                 )
             except BadRequest:
@@ -344,10 +394,6 @@ class ConversionService:
                         "convert_s": 0,
                         "upload_s": time.monotonic() - started,
                     }
-                )
-                progress.stage = "Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
-                await self.notify(
-                    bot, job, "✅ Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
                 )
                 return
         with tempfile.TemporaryDirectory(prefix="qulaybot-") as folder:
@@ -391,7 +437,7 @@ class ConversionService:
                 if job.action.startswith("video-")
                 else ("pdf" if job.action in {"pdf", "pdf-edit", "docx-pdf"} else "docx")
             )
-            output = root / f"natija.{extension}"
+            output = root / (filename or f"natija.{extension}")
             conversion_started = time.monotonic()
             if job.action in {"docx-pdf", "pdf-docx"}:
                 progress.stage = (
@@ -483,8 +529,8 @@ class ConversionService:
                 sent = await bot.send_document(
                     chat_id=job.chat_id,
                     document=output.resolve().as_uri(),
-                    filename=f"natija.{extension}",
-                    caption=caption,
+                    filename=output.name,
+                    caption=caption_prefix + caption,
                     read_timeout=max(600, self.settings.job_timeout),
                     write_timeout=max(600, self.settings.job_timeout),
                 )
@@ -493,8 +539,8 @@ class ConversionService:
                     sent = await bot.send_document(
                         chat_id=job.chat_id,
                         document=stream,
-                        filename=f"natija.{extension}",
-                        caption=caption,
+                        filename=output.name,
+                        caption=caption_prefix + caption,
                         read_timeout=180,
                         write_timeout=180,
                     )
@@ -523,7 +569,3 @@ class ConversionService:
                 self.results.move_to_end(self.result_key(job))
                 while len(self.results) > 128:
                     self.results.popitem(last=False)
-            # Oxirgi holatni ticker qayta yozib yubormasligi uchun uning matni ham almashtiriladi.
-            progress.stage = "Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang."
-            progress.percent = 100 if job.action.startswith("video-") else None
-            await self.notify(bot, job, "✅ Tayyor. Yangi xizmatni pastdagi tugmalardan tanlang.")

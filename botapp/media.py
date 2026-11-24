@@ -305,7 +305,8 @@ async def convert_video(
     audio_bitrate = min(96000, max(24000, total_bitrate // 4)) if info.has_audio else 0
     video_bitrate = max(16000, total_bitrate - audio_bitrate)
     fps = min(info.fps, 15 if fast else 30)
-    filters = f"scale={width}:{height}:flags=fast_bilinear,setsar=1,fps={fps:.6f}"
+    # Drop surplus frames before resizing so the scaler only sees frames we encode.
+    filters = f"fps={fps:.6f},scale={width}:{height}:flags=fast_bilinear,setsar=1"
     args = [
         settings.ffmpeg,
         "-hide_banner",

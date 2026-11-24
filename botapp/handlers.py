@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -226,8 +227,9 @@ class Handlers:
                 )
                 return
             instructions = {
-                "video": "🎬 Videoni yuboring. "
-                "Keyin pastroq o'lcham yoki hajmni kamaytirishni tanlang.",
+                "video": f"🎬 {self.settings.max_videos} tagacha video yuboring. "
+                "Barchasini yuborgach, siqish usulini tanlang. "
+                f"Jami limit {self.settings.max_input_bytes // MB} MB.",
                 "pdf": "📄 PDF uchun rasmlarni kerakli tartibda yuboring.\n"
                 "Hammasini yuborgach «PDF tayyorlash»ni bosing.",
                 "word": "📝 Word uchun rasmlarni yuboring.\n"
@@ -341,16 +343,31 @@ class Handlers:
         if kind == "image":
             text = image_prompt(len(session.uploads), session.mode, self.ocr_enabled)
             keyboard = image_keyboard(session.nonce, self.ocr_enabled, session.mode)
-        else:
-            text = (
-                "Video qabul qilindi. Pastroq o'lchamni yoki faqat hajmni kamaytirishni tanlang.\n"
-                "⚡ Tez rejim: ko'pi bilan 360p va 15 kadr/soniya. "
-                "Harakat odatdagidan kamroq silliq bo'ladi.\n"
-                "Tik videoning yo'nalishi saqlanadi."
-            )
-            short_edge = min(getattr(media, "width", 0), getattr(media, "height", 0))
-            keyboard = video_keyboard(session.nonce, short_edge)
-        await message.reply_text(text, reply_markup=keyboard)
+            await message.reply_text(text, reply_markup=keyboard)
+            return
+        count = len(session.uploads)
+        text = f"🎬 {count}/{self.settings.max_videos} ta video qabul qilindi.\n"
+        if count < self.settings.max_videos:
+            text += "Yana video yuborishingiz mumkin.\n"
+        text += (
+            "Hammasi tayyor bo'lsa, bitta siqish usulini tanlang.\n"
+            "⚡ Tez rejimda harakat kamroq silliq bo'ladi."
+        )
+        keyboard = video_keyboard(session.nonce, session.video_short_edge())
+        if session.video_menu_id is not None:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=update.effective_chat.id,
+                    message_id=session.video_menu_id,
+                    text=text,
+                    reply_markup=keyboard,
+                )
+            except TelegramError:
+                logger.info("Avvalgi video menyusi yangilanmadi, yangi menyu yuboriladi.")
+            else:
+                return
+        menu = await message.reply_text(text, reply_markup=keyboard)
+        session.video_menu_id = menu.message_id
 
     async def choose(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self.allowed(update):

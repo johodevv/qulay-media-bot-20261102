@@ -139,6 +139,91 @@ async def test_worker_recovers_after_bad_media_and_cancelled_job(settings, tmp_p
     await service.stop()
 
 
+async def test_video_batch_uses_one_menu_and_keeps_processing_after_an_invalid_file(
+    settings, monkeypatch
+):
+    settings = replace(settings, ffmpeg="ffmpeg", ffprobe="ffprobe", max_videos=3)
+    service = ConversionService(settings)
+    handlers = Handlers(service, settings, ocr_enabled=False)
+
+    async def get_file(file_id, **kwargs):
+        async def download(path, **kwargs):
+            path.write_text(file_id, encoding="utf-8")
+
+        return SimpleNamespace(file_size=4, download_to_drive=download)
+
+    async def convert(source, output, resolution, settings, **kwargs):
+        assert resolution == 360
+        if source.read_text(encoding="utf-8") == "bad!":
+            raise MediaError("Video ochilmadi.")
+        output.write_bytes(b"mp4")
+        return SimpleNamespace(width=640, height=360)
+
+    monkeypatch.setattr("botapp.service.convert_video", convert)
+    bot = SimpleNamespace(
+        get_file=AsyncMock(side_effect=get_file),
+        edit_message_text=AsyncMock(),
+        send_document=AsyncMock(),
+        send_message=AsyncMock(return_value=SimpleNamespace(message_id=500)),
+    )
+    reply = AsyncMock(return_value=SimpleNamespace(message_id=400))
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=1),
+        effective_chat=SimpleNamespace(id=1, type="private"),
+        callback_query=None,
+    )
+    context = SimpleNamespace(bot=bot)
+    for file_id, height in (("one!", 1080), ("bad!", 480), ("last", 720)):
+        update.effective_message = SimpleNamespace(
+            photo=None,
+            video=SimpleNamespace(
+                file_id=file_id, file_size=4, width=1920, height=height, duration=1
+            ),
+            reply_text=reply,
+        )
+        await handlers.receive(update, context)
+
+    assert reply.await_count == 1
+    assert bot.edit_message_text.await_count == 2
+    menu = bot.edit_message_text.await_args.kwargs
+    assert menu["message_id"] == 400
+    assert "3/3" in menu["text"]
+    choices = {
+        button.callback_data.split(":")[1]
+        for row in menu["reply_markup"].inline_keyboard
+        for button in row
+    }
+    assert "video-360" in choices
+    assert "video-480" not in choices
+    with pytest.raises(MediaError, match="3 ta video"):
+        service.add_upload(1, Upload("extra", 4, "video"))
+
+    session = service.sessions[1]
+    with pytest.raises(MediaError, match="Pastroq"):
+        service.enqueue(1, 1, session.nonce, "video-480", 500)
+    update.callback_query = SimpleNamespace(
+        data=f"{session.nonce}:video-360",
+        answer=AsyncMock(),
+        edit_message_reply_markup=AsyncMock(),
+    )
+    await handlers.choose(update, context)
+    await service.start(bot)
+    try:
+        await asyncio.wait_for(service.video_queue.join(), 5)
+    finally:
+        await service.stop()
+
+    assert [call.args[0] for call in bot.get_file.await_args_list] == ["one!", "bad!", "last"]
+    assert [call.kwargs["filename"] for call in bot.send_document.await_args_list] == [
+        "video-1.mp4",
+        "video-3.mp4",
+    ]
+    assert "Video 3/3" in bot.send_document.await_args.kwargs["caption"]
+    summary = bot.edit_message_text.await_args.kwargs["text"]
+    assert "2/3 ta video tayyor" in summary
+    assert "2-video: Video ochilmadi." in summary
+
+
 async def test_access_list_and_group_restriction(settings):
     handlers = Handlers(
         ConversionService(settings), replace(settings, allowed_user_ids=frozenset({42})), False

@@ -11,7 +11,11 @@ Local Bot API ishga tushganidan dastlabki 10 daqiqa ichida close() rad etilishi 
 handoff xatosida oldingi webhook tiklanadi. Standby zaxirani avtomatik yoqmaydi.
 
 Tez video rejimi ko'pi bilan 360p / 15 kadr/soniya beradi; harakat kamroq silliq
-bo'ladi. Oddiy o'lcham tanlovi ham saqlangan. Hujjat rasmi avtomatik buriladi va
+bo'ladi. 5 tagacha video yuboring va hammasi uchun bitta siqish usulini tanlang.
+Videolar navbat bilan siqiladi va har biri tayyor bo'lishi bilan yuboriladi.
+To'plamdagi jami hajm `MAX_INPUT_MB` dan oshmasligi kerak.
+
+Hujjat rasmi avtomatik buriladi va
 neytral qog'oz foni oqartiriladi. Word menyusidagi «Oson tahrirlash — faqat matn»
 oddiy Word matnini chiqaradi; asl joylashuvni saqlamaydi. Joylashuvli PDF/Word'da
 tanilgan matn tahrirlanadi, tanilmagan yozuvlar va chiziqlar rasm bo'lib qolishi

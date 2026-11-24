@@ -65,6 +65,7 @@ class Settings:
     job_timeout: int = 1200
     max_queue: int = 5
     max_images: int = 10
+    max_videos: int = 5
     max_image_pixels: int = 25_000_000
     session_ttl: int = 1800
     max_sessions: int = 200
@@ -110,6 +111,7 @@ class Settings:
             job_timeout=positive_int("JOB_TIMEOUT_SECONDS", 1200),
             max_queue=positive_int("MAX_QUEUE_SIZE", 5),
             max_images=positive_int("MAX_IMAGES", 10),
+            max_videos=positive_int("MAX_VIDEOS", 5),
             max_image_pixels=positive_int("MAX_IMAGE_PIXELS", 25_000_000),
             session_ttl=positive_int("SESSION_TTL_SECONDS", 1800),
             max_sessions=positive_int("MAX_SESSIONS", 200),
